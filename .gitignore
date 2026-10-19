@@ -1,0 +1,9 @@
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.env
+
+# Raw downloaded archives — large and re-downloadable (see data/DATASETS.md)
+phishing-detector/data/*.tar.gz
