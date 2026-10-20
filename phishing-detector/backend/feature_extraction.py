@@ -13,6 +13,9 @@ import re
 import math
 import os
 from urllib.parse import urlparse
+
+from brands import (ALL_BRAND_DOMAINS, BRAND_DOMAINS, FREE_HOSTING_PLATFORMS, LEET,
+                    SUSPICIOUS_TLDS, brand_matches, levenshtein)
  
 _TRUSTED_DOMAINS_PATH = os.path.join(
     os.path.dirname(__file__), "trusted_domains.txt"
@@ -100,7 +103,16 @@ SHORTENER_DOMAINS = {
     "bit.ly", "tinyurl.com", "goo.gl", "t.co", "ow.ly", "is.gd", "buff.ly",
     "cutt.ly", "rb.gy", "shorturl.at", "rebrand.ly", "t.ly", "tiny.cc",
     "s.id", "v.gd", "shorturl.com", "bl.ink", "short.io", "lnkd.in",
+    # QR-code generator redirectors — heavily used in "quishing" campaigns
+    "qrco.de", "q-r.to", "ead.me", "me-qr.com", "qr.link", "qrfy.io",
 }
+
+# Columns extract_features() returns that must NOT go into the model:
+#  * is_trusted_domain — legit training URLs come from the same Tranco list,
+#    so the model would learn "on the list = safe" (label leakage);
+#  * is_restricted_tld — a policy rule (bank.in, gov.in), applied in api.py.
+# Both are still computed: the API uses them for the trust override.
+NON_MODEL_FEATURES = {"is_trusted_domain", "is_restricted_tld"}
  
  
 def _count_meaningful_subdomains(subdomain: str) -> int:
@@ -130,6 +142,88 @@ def _shannon_entropy(s: str) -> float:
     return -sum(p * math.log2(p) for p in probs)
  
  
+_FILE_EXT_RE = re.compile(r"\.(php|html?|aspx?|jsp|cgi|js)$", re.I)
+_TOKEN_SPLIT_RE = re.compile(r"[/\-._?=&%+~:#@]+")
+# Brand names plus the labels of their real domains (steamcommunity,
+# microsoftonline); short ones are left out — at 4 letters almost any word
+# is within edit distance 1-2.
+_BRAND_TARGETS = sorted({b for b in BRAND_DOMAINS if len(b) >= 5} |
+                        {d.split(".")[0] for d in ALL_BRAND_DOMAINS if len(d.split(".")[0]) >= 5})
+
+
+def _min_brand_distance(label: str) -> tuple[int, int]:
+    """
+    Smallest edit distance from the registered label — or any hyphen-
+    separated part of it — to a brand (digit swaps like 0->o undone first),
+    plus the length of the brand it matched.
+    0 = brand name used on a domain the brand doesn't own (paypal-secure);
+    1-2 = typosquat (paypa1 -> 0 after leet, amazom, steamcommunlty);
+    capped at 4 = unrelated.
+    """
+    norm = label.translate(LEET)
+    parts = {norm} | {p for p in norm.split("-") if len(p) >= 4}
+    best, best_len = 4, 0
+    for part in parts:
+        for target in _BRAND_TARGETS:
+            d = levenshtein(part, target, max_dist=3)
+            if d < best:
+                best, best_len = d, len(target)
+                if d == 0:
+                    return 0, best_len
+    return best, best_len
+
+
+def _v2_features(url, parsed, subdomain, domain, suffix, path, query) -> dict:
+    """
+    Second-generation features (Phase 4). All lexical — no network — and
+    chosen to describe *how the URL is built* rather than which list the
+    domain is on, so the model generalises to brand-new domains.
+    """
+    host = (parsed.hostname or "").lower()
+    registered = f"{domain}.{suffix}" if suffix else domain
+    on_brand_domain = registered in ALL_BRAND_DOMAINS
+    sub_norm = subdomain.translate(LEET)
+    sub_tokens = set(_TOKEN_SPLIT_RE.split(sub_norm))
+    path_q = (path + "?" + query).lower() if query else path.lower()
+    path_tokens = set(_TOKEN_SPLIT_RE.split(path_q))
+    segments = [s for s in path.split("/") if s]
+    tokens = [t for t in _TOKEN_SPLIT_RE.split(host + path) if t]
+    vowels = sum(c in "aeiou" for c in domain)
+    letters = sum(c.isalpha() for c in domain)
+    brand_dist, brand_len = (4, 0) if on_brand_domain else _min_brand_distance(domain)
+    after_scheme = url.split("://", 1)[-1]
+
+    return {
+        # Lookalikes
+        "is_punycode": int("xn--" in host),
+        "brand_in_subdomain": int(not on_brand_domain and any(
+            brand_matches(b, sub_norm, sub_tokens) for b in BRAND_DOMAINS)),
+        "brand_in_path": int(not on_brand_domain and any(
+            brand_matches(b, path_q, path_tokens) for b in BRAND_DOMAINS)),
+        "brand_edit_distance": brand_dist,
+        # 1 edit from any brand, or 2 edits from a long one (2 edits turns
+        # "apple" into "applied" — too loose for short names)
+        "is_typosquat": int(brand_dist == 1 or (brand_dist == 2 and brand_len >= 8)),
+        # Hosting / TLD
+        "is_free_hosting": int(registered in FREE_HOSTING_PLATFORMS
+                               or host.endswith(".sites.google.com") or host == "sites.google.com"),
+        "suspicious_tld": int(suffix.split(".")[-1] in SUSPICIOUS_TLDS),
+        # "www." excluded, like num_subdomains — otherwise "has www" becomes a
+        # dataset shortcut (legit URLs carry it far more often than phishing)
+        "subdomain_length": len(subdomain.removeprefix("www").lstrip(".")),
+        "domain_hyphens": domain.count("-"),
+        "domain_digits": sum(c.isdigit() for c in domain),
+        "domain_vowel_ratio": round(vowels / letters, 3) if letters else 0,
+        # Path / query structure
+        "path_depth": len(segments),
+        "has_file_extension": int(bool(_FILE_EXT_RE.search(path))),
+        "query_length": len(query),
+        "has_embedded_url": int("http" in after_scheme.lower() or "//" in after_scheme),
+        "longest_token": max((len(t) for t in tokens), default=0),
+        "url_entropy": round(_shannon_entropy(url), 3),
+    }
+
+
 def get_full_domain(url: str) -> str:
     """
     Public helper: returns just the apex domain (e.g. 'github.io') for a
@@ -152,6 +246,10 @@ def extract_features(url: str) -> dict:
     url = url.strip()
     parsed = urlparse(url if "://" in url else "http://" + url)
     subdomain, domain, suffix = _split_domain(parsed.hostname or "")
+    if re.match(r"^(\d{1,3}\.){3}\d{1,3}$", parsed.hostname or ""):
+        # An IP has no subdomain/domain/TLD structure — without this,
+        # 192.168.1.1 reads as "2 subdomains of 1.1"
+        subdomain, domain, suffix = "", parsed.hostname, ""
     full_domain = f"{domain}.{suffix}" if suffix else domain
     path = parsed.path or ""
     if path == "/":
@@ -201,6 +299,7 @@ def extract_features(url: str) -> dict:
             sum(c.isdigit() for c in url) / len(url), 3
         ) if url else 0,
     }
+    features.update(_v2_features(url, parsed, subdomain, domain, suffix, path, query))
  
     # TODO (content-based, requires fetching the page — do this in a
     # separate, rate-limited, sandboxed step, not inline here):

@@ -28,7 +28,9 @@ load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 
 import ai  # noqa: E402  (reads env at call time)
 import intel  # noqa: E402
+from brands import FREE_HOSTING_PLATFORMS
 from email_analysis import analyze_email
+from explain import explain
 from feature_extraction import SHORTENER_DOMAINS, extract_features, get_full_domain
 
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "model.pkl")
@@ -65,21 +67,35 @@ app.add_middleware(
  
 _model = None
 _feature_cols = None
-_scaler = None
- 
- 
+_scaler = None      # v1 only
+_bundle = {}        # v2: threshold, reference row for explanations, version
+
+
 def _load_artifacts():
-    global _model, _feature_cols, _scaler
+    """
+    Loads either model format:
+      v2 (train_model.py, Phase 4): model.pkl is a dict bundle with a
+         calibrated model, feature list, decision threshold and reference row.
+      v1 (original): model.pkl estimator + scaler.pkl + model_features.pkl.
+    """
+    global _model, _feature_cols, _scaler, _bundle
     if _model is None:
         if not os.path.exists(MODEL_PATH):
             raise RuntimeError(
                 "model.pkl not found — run train_model.py first"
             )
-        _model = joblib.load(MODEL_PATH)
-        _feature_cols = joblib.load(FEATURES_PATH)
-        _scaler = joblib.load(SCALER_PATH)
- 
- 
+        loaded = joblib.load(MODEL_PATH)
+        if isinstance(loaded, dict):
+            _bundle = loaded
+            _feature_cols = loaded["features"]
+            _model = loaded["model"]
+        else:
+            _model = loaded
+            _feature_cols = joblib.load(FEATURES_PATH)
+            _scaler = joblib.load(SCALER_PATH)
+            _bundle = {"threshold": 0.5, "version": "1.0"}
+
+
 class PredictRequest(BaseModel):
     url: str
  
@@ -90,6 +106,8 @@ class PredictResponse(BaseModel):
     phishing_probability: float
     risk_level: str
     trust_override_applied: bool = False
+    reasons: list[dict] = []
+    model_version: str = "1.0"
  
  
 # Trust override now covers subdomains of trusted domains too (e.g.
@@ -104,15 +122,30 @@ class PredictResponse(BaseModel):
 # point of a reputation check. Those apex domains are excluded from the
 # override entirely, subdomain or not, so they're always scored purely
 # on their URL features.
-UGC_SUBDOMAIN_PLATFORMS = {
-    "github.io", "blogspot.com", "wordpress.com", "weebly.com",
-    "wixsite.com", "000webhostapp.com", "herokuapp.com", "netlify.app",
-    "vercel.app", "pages.dev", "firebaseapp.com", "web.app",
-    "googleusercontent.com", "sites.google.com", "notion.site",
-    "glitch.me", "repl.co", "surge.sh", "azurewebsites.net",
-}
+UGC_SUBDOMAIN_PLATFORMS = FREE_HOSTING_PLATFORMS
  
 TRUST_OVERRIDE_CAP = 0.05
+
+# Brand-impersonation rule (the mirror image of the trust override): a domain
+# that is a typo of a brand, uses a brand as a subdomain of someone else's
+# site, or puts the brand name on a domain the brand doesn't own is floored
+# at "high" risk. Lookalikes are rare in the training data, so the model
+# alone under-weights them; the rule makes that knowledge explicit.
+IMPERSONATION_FLOOR = 0.9
+
+
+def _apply_impersonation_rule(proba: float, features: dict) -> tuple[float, dict | None]:
+    if features.get("is_typosquat"):
+        why = "Domain looks like a misspelt brand name (typosquatting)"
+    elif features.get("brand_in_subdomain"):
+        why = "A brand name is used as a subdomain of an unrelated site"
+    elif features.get("brand_edit_distance") == 0:
+        why = "Domain uses a brand name it doesn't belong to"
+    elif features.get("is_punycode"):
+        why = "Internationalised (punycode) domain — may use look-alike characters"
+    else:
+        return proba, None
+    return max(proba, IMPERSONATION_FLOOR), {"feature": "rule:brand_impersonation", "reason": why}
  
  
 def _apply_trust_override(proba: float, features: dict, full_domain: str) -> tuple[float, bool]:
@@ -138,7 +171,8 @@ def root():
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "model_loaded": _model is not None}
+    return {"status": "ok", "model_loaded": _model is not None,
+            "model_version": _bundle.get("version")}
  
  
 def score_url(url: str) -> PredictResponse:
@@ -152,28 +186,48 @@ def score_url(url: str) -> PredictResponse:
  
     features = extract_features(url)
     row = pd.DataFrame([features])[_feature_cols]
-    row_scaled = _scaler.transform(row)
- 
-    proba = float(_model.predict_proba(row_scaled)[0, 1])
+    X = _scaler.transform(row) if _scaler is not None else row
+
+    raw = float(_model.predict_proba(X)[0, 1])
     full_domain = get_full_domain(url)
-    proba, override_applied = _apply_trust_override(proba, features, full_domain)
-    is_phishing = proba >= 0.5
- 
-    if proba >= 0.75:
+    proba, override_applied = _apply_trust_override(raw, features, full_domain)
+    rule_reason = None
+    threshold = _bundle.get("threshold", 0.5)
+    if not override_applied and "reference" in _bundle:
+        proba, rule_reason = _apply_impersonation_rule(proba, features)
+        if rule_reason is None and features.get("is_shortened"):
+            # The text of a short link says nothing about where it goes, so
+            # neither "safe" nor "high" is honest: report it as medium.
+            proba = threshold
+            rule_reason = {"feature": "rule:shortener",
+                           "reason": "Shortened / QR link — the real destination is hidden; expand it before trusting"}
+    is_phishing = proba >= threshold
+
+    # Bands are anchored on the model's own decision threshold: medium is the
+    # lower half of [threshold, 1], high the upper half. For v1 (threshold
+    # 0.5) this gives the original bands: medium 0.5-0.75, high >= 0.75.
+    if proba >= threshold + (1 - threshold) / 2:
         risk = "high"
-    elif proba >= 0.5:
+    elif proba >= threshold:
         risk = "medium"
-    elif proba >= 0.25:
+    elif proba >= threshold / 2:
         risk = "low"
     else:
         risk = "safe"
- 
+
+    reasons = [rule_reason] if rule_reason else []
+    if "reference" in _bundle and not override_applied and risk != "safe":
+        reasons += explain(_model, _feature_cols, _bundle["reference"], features, raw,
+                           top_n=3 - len(reasons))
+
     return PredictResponse(
         url=url,
         is_phishing=is_phishing,
         phishing_probability=round(proba, 4),
         risk_level=risk,
         trust_override_applied=override_applied,
+        reasons=reasons,
+        model_version=_bundle.get("version", "1.0"),
     )
 
 

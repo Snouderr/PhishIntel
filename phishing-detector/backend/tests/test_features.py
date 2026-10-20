@@ -52,8 +52,35 @@ def test_trusted_domain_lookup():
     assert extract_features("https://www.google.com")["is_trusted_domain"] == 1
 
 
-def test_feature_set_is_stable():
-    # The saved model depends on this exact column set.
+def test_model_features_are_extracted():
+    # The saved model must only use columns extract_features() produces,
+    # and never the list-membership features (label leakage).
     import joblib, os
-    cols = joblib.load(os.path.join(os.path.dirname(__file__), "..", "model_features.pkl"))
-    assert set(extract_features("https://example.com")) == set(cols)
+    from feature_extraction import NON_MODEL_FEATURES
+    here = os.path.dirname(__file__)
+    bundle = joblib.load(os.path.join(here, "..", "model.pkl"))
+    if isinstance(bundle, dict):
+        cols = bundle["features"]
+    else:
+        cols = joblib.load(os.path.join(here, "..", "model_features.pkl"))
+    assert set(cols) <= set(extract_features("https://example.com"))
+    if isinstance(bundle, dict):
+        assert not set(cols) & NON_MODEL_FEATURES
+
+
+def test_typosquat_and_lookalike_features():
+    f = extract_features("https://steamcommunlty-gift.ru/r")
+    assert f["is_typosquat"] == 1
+    assert extract_features("https://applied-science.edu")["is_typosquat"] == 0
+    assert extract_features("http://paypa1-secure.com/login.php")["brand_edit_distance"] == 0
+    assert extract_features("https://www.paypal.com/signin")["brand_edit_distance"] == 4
+    assert extract_features("https://paypal.account-verify.xyz/")["brand_in_subdomain"] == 1
+    assert extract_features("https://xn--pple-43d.com/")["is_punycode"] == 1
+
+
+def test_structure_features():
+    f = extract_features("https://myshop.weebly.com/a/b/login.php?next=http://x.com")
+    assert f["is_free_hosting"] == 1 and f["path_depth"] == 3
+    assert f["has_file_extension"] == 1 and f["has_embedded_url"] == 1
+    assert extract_features("https://login.example.tk")["suspicious_tld"] == 1
+    assert extract_features("https://qrco.de/abc")["is_shortened"] == 1

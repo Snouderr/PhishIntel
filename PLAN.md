@@ -130,18 +130,26 @@ Each phase ends with something runnable and testable. Tick boxes as we go.
 - [ ] Show *why* each verdict point was added (score breakdown) in the report
 - [ ] Optional: Certificate Transparency (crt.sh) first-seen date as a second age signal
 
-### Phase 4 — ML model improvements (the "research" part of the project)
-- [ ] Rebuild dataset: dedupe; legit URLs **with real paths** (Common Crawl / crawled Tranco pages,
-      not just homepages); balance classes; record collection date
-- [ ] Remove leakage: move `is_trusted_domain` out of the model into the rule layer only;
-      check `uses_https` and path features after rebalancing
-- [ ] Split by **domain** (`GroupShuffleSplit`) so no domain is in both train and test
-- [ ] New features: punycode/IDN, brand name in subdomain/path, edit distance to top brands
-      (typosquatting), TLD risk, path token stats, consonant/vowel ratio, URL entropy,
-      optional domain age (cached RDAP)
-- [ ] Add XGBoost; 5-fold CV; `GridSearchCV`; probability calibration; choose threshold for recall
-- [ ] Evaluation outputs: confusion matrix, ROC/PR curves, feature importance → `reports/`
-- [ ] `/predict` returns **top reasons** for each verdict (SHAP or feature contributions)
+### Phase 4 — ML model improvements ✅ (see `phishing-detector/README.md` for results)
+- [x] Rebuild dataset (`build_dataset.py` → `data/urls_v2.csv`, 28,868 URLs): real deep links
+      from sitemaps of ~2,500 Tranco domains across all rank bands, legit pages on 16 hosting
+      platforms (Common Crawl), phishing capped per host; collection date recorded
+- [x] Remove leakage: `is_trusted_domain` / `is_restricted_tld` out of the model, rule layer only
+- [x] Split by **domain** (shared platforms split by host); 5-fold `StratifiedGroupKFold` for selection
+- [x] New features (17): punycode, brand in subdomain/path, brand edit distance + typosquat,
+      free hosting, abused TLD, path depth, file extension, embedded URL, entropy, token length…
+      (domain age deliberately left out — it needs a network call per URL; PhishIntel uses it instead)
+- [x] Models: LR / Random Forest / HistGradientBoosting (sklearn's gradient boosting — same
+      family as XGBoost, no extra dependency); sigmoid calibration; threshold from CV
+      predictions at precision ≥ 97%
+- [x] `reports/`: metrics.json, ROC/PR curves vs v1, confusion matrix, permutation importance,
+      false positive / negative lists
+- [x] `/predict` returns up to 3 **reasons** (occlusion in log-odds, `explain.py`) + model version;
+      PhishIntel shows them under each URL
+- [x] Hybrid rules: brand-impersonation floor, shortener → medium, trust cap (now excludes
+      shorteners); risk bands anchored on the model's threshold
+- [x] Result: unseen-URL false-positive rate 75% (v1) → 6.3% (v2); held-out test F1 0.955,
+      FPR 3.6%. v1 kept in `backend/legacy_v1/` for the comparison
 
 ### Phase 5 — Extension upgrades
 - [ ] Popup shows the reasons from `/predict`

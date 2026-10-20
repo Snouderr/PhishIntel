@@ -67,7 +67,9 @@ def _redact(obj, recipients: list):
     for addr in recipients:
         addr = addr.lower()
         needles.add(addr)
-        local = addr.split("@")[0]
+        local, _, domain = addr.partition("@")
+        if domain:
+            needles.add(domain)
         if len(local) >= 3:
             needles.add(local)
             needles.update(p for p in re.split(r"[._\-+]", local) if len(p) >= 3)
@@ -100,6 +102,7 @@ def build_facts(kind: str, case: dict, redact: bool = True) -> dict:
     findings = [{k: f.get(k) for k in ("severity", "title", "detail")} for f in all_findings]
     urls = [{"url": u.get("url"), "flags": u.get("flags"), "link_text": u.get("link_text") or None,
              "ml_phishing_probability": (u.get("ml") or {}).get("phishing_probability"),
+             "ml_reasons": [r.get("reason") for r in (u.get("ml") or {}).get("reasons") or []] or None,
              "blocklisted": (u.get("intel") or {}).get("listed")}
             for u in case.get("urls") or []]
     attachments = [{k: a.get(k) for k in ("filename", "content_type", "sha256")}

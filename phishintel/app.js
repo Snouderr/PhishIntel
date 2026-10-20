@@ -655,7 +655,9 @@ function stageUrls() {
   const rows = urls.map(u => `
     <tr>
       <td class="mono break" title="${esc(u.url)}">${esc(shorten(u.url, 70))}
-        ${u.link_text ? `<div class="muted">shown as: “${esc(shorten(u.link_text, 60))}”</div>` : ''}</td>
+        ${u.link_text ? `<div class="muted">shown as: “${esc(shorten(u.link_text, 60))}”</div>` : ''}
+        ${(state.urlScores[u.url]?.reasons || []).length ? `<ul class="ml-reasons">${state.urlScores[u.url].reasons
+          .map(r => `<li>${esc(r.reason)}</li>`).join('')}</ul>` : ''}</td>
       <td>${(u.flags || []).map(f => `<span class="badge ${f === 'no-https' ? 'badge-gray' : 'badge-yellow'}">${esc(f)}</span>`).join(' ') || '<span class="muted">—</span>'}</td>
       <td>${mlCell(u.url)}</td>
       <td>${intelCell(u.url)}</td>

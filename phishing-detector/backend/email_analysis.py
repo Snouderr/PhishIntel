@@ -24,34 +24,8 @@ from email.utils import getaddresses, parseaddr
 from html.parser import HTMLParser
 from urllib.parse import urlparse
 
+from brands import BRAND_DOMAINS, LEET as _LEET, brand_matches
 from feature_extraction import SHORTENER_DOMAINS, get_full_domain
-
-# Brand keyword -> registered domains that brand actually sends from / owns.
-# A brand keyword appearing in a domain that ISN'T in its list is a
-# lookalike signal (e.g. docusign-secure.com, paypal-verify.net).
-BRAND_DOMAINS = {
-    "paypal": {"paypal.com"},
-    "microsoft": {"microsoft.com", "office.com", "outlook.com", "live.com",
-                  "microsoftonline.com", "office365.com"},
-    "office365": {"office.com", "office365.com", "microsoft.com"},
-    "outlook": {"outlook.com", "microsoft.com", "live.com"},
-    "docusign": {"docusign.com", "docusign.net"},
-    "apple": {"apple.com", "icloud.com"},
-    "icloud": {"icloud.com", "apple.com"},
-    "amazon": {"amazon.com", "amazon.in", "amazon.co.uk", "amazonses.com"},
-    "netflix": {"netflix.com"},
-    "google": {"google.com", "gmail.com", "googlemail.com", "google.co.in",
-               "googleusercontent.com", "withgoogle.com"},
-    "dhl": {"dhl.com", "dhl.de"},
-    "fedex": {"fedex.com"},
-    "linkedin": {"linkedin.com"},
-    "facebook": {"facebook.com", "facebookmail.com", "meta.com"},
-    "instagram": {"instagram.com", "facebookmail.com"},
-    "whatsapp": {"whatsapp.com"},
-    "hdfc": {"hdfcbank.com", "hdfc.bank.in"},
-    "icici": {"icicibank.com", "icici.bank.in"},
-    "sbi": {"sbi.co.in", "onlinesbi.sbi", "sbi.bank.in"},
-}
 
 URGENCY_PATTERNS = [
     r"\burgent(ly)?\b", r"\bimmediate(ly)?\b", r"\bwithin 24 hours\b",
@@ -123,12 +97,9 @@ def _brand_lookalike(domain: str):
         # Short brands (sbi, dhl) only as a whole token, or they match
         # inside unrelated words; longer ones anywhere (docusign-secure,
         # paypalverify, paypal.verify-acct.com).
-        if (brand in tokens) if len(brand) <= 4 else (brand in normalized):
+        if brand_matches(brand, normalized, tokens):
             return brand
     return None
-
-
-_LEET = str.maketrans({"0": "o", "1": "l", "3": "e", "4": "a", "5": "s", "7": "t"})
 
 
 def _is_legit_brand_domain(registered_domain: str) -> bool:

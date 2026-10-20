@@ -44,3 +44,34 @@ year project and keeps feature extraction time reasonable.
   Tranco all have citable formats on their sites).
 - Keep a `data/urls.csv` with two columns: `url,label` — this is the format
   `train_model.py` expects.
+
+---
+
+## v2 training set — `urls_v2.csv` (Phase 4)
+
+Built by `backend/build_dataset.py` (collected October 2026). Columns:
+`url,label,source`. It replaces `urls.csv` for training because the original
+legitimate class was **mostly bare homepages taken from the same Tranco list
+used for the trusted-domain feature** — so the model could learn "has a
+path" or "is on the list" instead of what phishing URLs look like.
+
+| source | label | what it is |
+|---|---|---|
+| `tranco-home` | 0 | down-sampled homepages from the original `urls.csv` |
+| `deep-link` | 0 | real deep links from each site's own `sitemap.xml`, for ~2,500 domains sampled across all Tranco rank bands (top 1k … 300k) |
+| `cc-platform` | 0 | legitimate pages on free-hosting platforms (github.io, sites.google.com, weebly, wix, vercel, netlify…) from the Common Crawl URL index (CC-MAIN-2026-39), max 6 pages per site |
+| `orig-phish` | 1 | phishing rows from the original `urls.csv` |
+| `phishdb` | 1 | sample of the Phishing.Database dump (`ALL-phishing-links.tar.gz`, list date 2026-09-25), max 3 URLs per host so one campaign can't dominate |
+
+Any "legitimate" URL that appears in the phishing database is dropped.
+
+Reproduce: `python build_dataset.py collect` (resumable; caches in
+`sitemap_cache.jsonl` / `cc_cache.jsonl`, both committed) then
+`python build_dataset.py build`.
+
+**Known label noise / limitations** (worth stating in the report):
+- Tranco-ranked ≠ guaranteed benign (some ranked sites are spam or piracy).
+- Common Crawl returns URLs alphabetically, so platform samples are capped
+  per host to stay diverse.
+- Phishing feeds are a snapshot; phishing URLs go offline within days, so
+  the model should be retrained periodically (concept drift).

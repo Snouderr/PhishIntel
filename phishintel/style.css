@@ -188,3 +188,7 @@ code { font-family: monospace; font-size: 12px; background: #f3f4f6;
 .ai-preview pre { max-height: 260px; overflow: auto; background: #fff; border: 1px solid #eee;
                   border-radius: 6px; padding: 8px; font-size: 11px; white-space: pre-wrap;
                   word-break: break-all; margin-bottom: 10px; }
+
+/* ML model reasons under a URL */
+.ml-reasons { margin: 4px 0 0 16px; font-size: 11px; color: #92400e; font-family: system-ui, sans-serif; }
+.ml-reasons li { margin: 1px 0; }
