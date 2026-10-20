@@ -151,14 +151,21 @@ Each phase ends with something runnable and testable. Tick boxes as we go.
 - [x] Result: unseen-URL false-positive rate 75% (v1) → 6.3% (v2); held-out test F1 0.955,
       FPR 3.6%. v1 kept in `backend/legacy_v1/` for the comparison
 
-### Phase 5 — Extension upgrades
-- [ ] Popup shows the reasons from `/predict`
-- [ ] "Report false positive" + per-user allowlist (`chrome.storage`)
-- [ ] Full-page interstitial for high risk (with "proceed anyway")
-- [ ] Settings page: API URL, sensitivity threshold
-- [ ] Log predictions to SQLite via API (for FP/FN review)
-- [ ] "Investigate in PhishIntel" button → opens app with the URL pre-loaded
-- [ ] Tighten `host_permissions`; check punycode lookalikes client-side
+### Phase 5 — Extension upgrades ✅ (extension v2.0.0)
+- [x] Popup shows the model's reasons, model version, and actions
+- [x] "Report false alarm" / "Report as phishing" → `POST /feedback` (local SQLite);
+      "Always trust this site" → per-user allowlist (`chrome.storage.sync`, covers subdomains)
+- [x] Full-page warning (`warning.html`) for high risk: hostname highlighted, reasons,
+      go back / report / proceed anyway (bypass lasts until browser restart)
+- [x] Settings page: API address (asks for host permission only for a custom one), block high
+      risk, medium-risk banner, trusted-sites list, connection test
+- [x] Opt-in prediction logging (`log: true` on `/predict`) — off by default (browsing history);
+      `python feedback.py export` → `reports/feedback_review.csv` for relabelling
+- [x] "Investigate in PhishIntel" → `/app/#url=…` opens a fresh case at the URL stage
+- [x] Permissions tightened: no `<all_urls>` host permission, no `scripting`; banner rendered in a
+      closed shadow root with DOM APIs (no innerHTML); punycode handled by the server-side rule
+- [x] Verified end-to-end in headless Edge with the unpacked extension: block → warning →
+      proceed, banner show/clear, popup report reaches the backend, settings, deep link
 
 ### Phase 6 — Documentation & delivery
 - [ ] Top-level README: architecture diagram, setup, `.env.example`, run commands

@@ -1001,8 +1001,31 @@ function readFile(file) {
 }
 
 // ─── START ───────────────────────────────────────────────
-render();
-if (state.analysis) { scoreUrls(); enrichAll(); }
+// Opened from the browser extension ("Investigate in PhishIntel"):
+// /app/#url=<encoded> starts a fresh case for that one URL.
+function urlFromHash() {
+  const m = location.hash.match(/^#url=(.+)$/);
+  if (!m) return null;
+  history.replaceState(null, '', location.pathname); // don't re-trigger on refresh
+  try {
+    const url = decodeURIComponent(m[1]);
+    return /^https?:\/\//i.test(url) ? url : null;
+  } catch {
+    return null;
+  }
+}
+
+const sharedUrl = urlFromHash();
+if (sharedUrl) {
+  state = newCase();
+  state.emailRaw = `Subject: URL submitted from the browser extension\n\n${sharedUrl}\n`;
+  state.sourceName = 'browser extension';
+  render();
+  actions.analyze().then(() => { if (state.analysis) setStage(2); });
+} else {
+  render();
+  if (state.analysis) { scoreUrls(); enrichAll(); }
+}
 fetch(API_BASE + '/config')
   .then(r => r.json())
   .then(c => {

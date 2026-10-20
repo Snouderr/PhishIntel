@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Phishing Detector — Settings</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; color: #1a1a1a;
+           background: #f5f5f3; margin: 0; padding: 24px 16px; }
+    main { max-width: 620px; margin: 0 auto; background: #fff; border: 1px solid #e0e0e0;
+           border-radius: 12px; padding: 20px 24px; }
+    h1 { font-size: 18px; margin: 0 0 4px; }
+    h2 { font-size: 13px; margin: 22px 0 8px; text-transform: uppercase; letter-spacing: .04em; color: #777; }
+    .row { display: flex; gap: 8px; align-items: center; }
+    input[type=text] { flex: 1; padding: 8px 10px; border: 1px solid #ccc; border-radius: 8px; font: inherit; }
+    label.toggle { display: flex; gap: 10px; align-items: flex-start; margin: 10px 0; cursor: pointer; }
+    label.toggle input { margin-top: 4px; }
+    .hint { font-size: 12px; color: #777; }
+    button { font: inherit; padding: 7px 14px; border-radius: 8px; border: 1px solid #ccc;
+             background: #fff; cursor: pointer; }
+    button.primary { background: #1976d2; color: #fff; border-color: #1976d2; }
+    #status, #conn { font-size: 13px; margin-top: 8px; min-height: 18px; }
+    ul#allowlist { list-style: none; padding: 0; margin: 0; }
+    ul#allowlist li { display: flex; justify-content: space-between; align-items: center;
+                      padding: 6px 0; border-bottom: 1px solid #eee; font-family: ui-monospace, Consolas, monospace; font-size: 13px; }
+    .empty { color: #999; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>🛡️ Phishing Detector — Settings</h1>
+    <div class="hint">Changes are saved automatically.</div>
+
+    <h2>Detection API</h2>
+    <div class="row">
+      <input type="text" id="apiUrl" placeholder="http://localhost:8000">
+      <button id="test">Test connection</button>
+    </div>
+    <div id="conn"></div>
+
+    <h2>Protection</h2>
+    <label class="toggle"><input type="checkbox" id="blockHighRisk">
+      <span><strong>Block high-risk pages</strong> with a full-page warning<br>
+      <span class="hint">You can still choose “Proceed anyway”.</span></span></label>
+    <label class="toggle"><input type="checkbox" id="warnMedium">
+      <span><strong>Show a banner on medium-risk pages</strong></span></label>
+
+    <h2>Privacy</h2>
+    <label class="toggle"><input type="checkbox" id="logChecks">
+      <span><strong>Log checked URLs</strong> to the backend's local database for error analysis<br>
+      <span class="hint">Off by default — this is effectively your browsing history. It stays on the machine
+      running the backend (data/feedback.sqlite) and is never sent anywhere else.</span></span></label>
+
+    <h2>Trusted sites</h2>
+    <ul id="allowlist"></ul>
+
+    <div id="status"></div>
+  </main>
+  <script src="settings.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>

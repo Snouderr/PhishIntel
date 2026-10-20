@@ -31,12 +31,34 @@ uvicorn api:app --port 8000
 
 - PhishIntel: **http://localhost:8000/app/** (load a demo sample, click Analyze)
 - API docs: http://localhost:8000/docs
-- Extension: `chrome://extensions` → Developer mode → *Load unpacked* → `phishing-detector/extension/`
-- Tests: `cd phishing-detector/backend && python -m pytest` (80 tests, no network needed)
+- Extension: `chrome://extensions` (or `edge://extensions`) → Developer mode → *Load unpacked* →
+  `phishing-detector/extension/`
+- Tests: `cd phishing-detector/backend && python -m pytest` (83 tests, no network needed)
 
 Optional keys go in `backend/.env` (copy `.env.example`). **Everything works
 without any key.** Gemini enables cloud AI summaries; VirusTotal and URLhaus
 add extra lookups. Ollama (local LLM) is detected automatically when it's running.
+
+## The browser extension (v2.0)
+
+- **High risk:** a full-page warning before the page opens. It highlights the
+  real hostname and says *why*. You can go back, report a false alarm, or
+  proceed anyway.
+- **Medium risk:** a dismissible banner on the page.
+- **Shortened / QR links:** reported as medium, because their destination is
+  hidden.
+- **Popup:** the verdict, the reasons, and these actions:
+  - *Investigate in PhishIntel* (opens a case for the URL)
+  - *Report false alarm* / *Report as phishing* (`POST /feedback`, stored
+    locally)
+  - *Always trust this site*
+- **Settings:** API address, blocking and banner toggles, the trusted-sites
+  list, and **opt-in** logging of checked URLs. Logging is off by default
+  because the log is effectively your browsing history. Run
+  `python backend/feedback.py export` to turn reports into a relabelling CSV.
+- **Permissions:** only `tabs`, `storage` and `webNavigation`, plus the local
+  API. No access to all websites is requested. The banner renders in a closed
+  shadow root using DOM APIs only.
 
 ## The URL model (v2)
 

@@ -290,3 +290,33 @@ def test_gemini_ignores_thought_parts_and_uses_low_thinking(monkeypatch):
     monkeypatch.setattr(ai.httpx, "post", fake_post)
     assert ai.gemini_generate("p")[0] == "Final answer."
     assert sent["generationConfig"]["thinkingConfig"] == {"thinkingLevel": "low"}
+
+
+# ─── Phase 5: feedback + opt-in logging ──────────────────────────────────
+
+import feedback
+
+
+@pytest.fixture
+def temp_feedback_db(tmp_path, monkeypatch):
+    monkeypatch.setattr(feedback, "DB_PATH", str(tmp_path / "fb.sqlite"))
+
+
+def test_feedback_roundtrip(client, temp_feedback_db, tmp_path):
+    r = client.post("/feedback", json={"url": "https://example.org/a", "label": "false_positive",
+                                       "risk_level": "high", "probability": 0.91, "source": "extension"})
+    assert r.status_code == 200 and r.json()["ok"]
+    assert client.get("/feedback/stats").json()["feedback"] == {"false_positive": 1}
+    n = feedback.export_review(str(tmp_path / "review.csv"))
+    assert n == 1 and "suggested_training_label" in (tmp_path / "review.csv").read_text()
+
+
+def test_feedback_rejects_unknown_label(client, temp_feedback_db):
+    assert client.post("/feedback", json={"url": "x", "label": "meh"}).status_code == 422
+
+
+def test_predictions_logged_only_when_opted_in(client, temp_feedback_db):
+    client.post("/predict", json={"url": "https://example.org/x"})
+    assert client.get("/feedback/stats").json()["logged_predictions"] == {}
+    client.post("/predict", json={"url": "https://example.org/y", "log": True, "source": "extension"})
+    assert sum(client.get("/feedback/stats").json()["logged_predictions"].values()) == 1

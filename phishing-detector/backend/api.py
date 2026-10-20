@@ -27,6 +27,7 @@ from pydantic import BaseModel, Field
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 
 import ai  # noqa: E402  (reads env at call time)
+import feedback  # noqa: E402
 import intel  # noqa: E402
 from brands import FREE_HOSTING_PLATFORMS
 from email_analysis import analyze_email
@@ -98,6 +99,9 @@ def _load_artifacts():
 
 class PredictRequest(BaseModel):
     url: str
+    # Opt-in (extension setting): store this check in data/feedback.sqlite
+    log: bool = False
+    source: str | None = None
  
  
 class PredictResponse(BaseModel):
@@ -233,7 +237,11 @@ def score_url(url: str) -> PredictResponse:
 
 @app.post("/predict", response_model=PredictResponse)
 def predict(req: PredictRequest):
-    return score_url(req.url)
+    result = score_url(req.url)
+    if req.log:
+        feedback.log_prediction(req.url, result.risk_level, result.phishing_probability,
+                                result.model_version, req.source)
+    return result
 
 
 MAX_EMAIL_CHARS = 10_000_000  # ~10 MB; real phishing samples are far smaller
@@ -325,3 +333,26 @@ def ai_summarize(req: SummaryRequest):
 @app.get("/config")
 def config():
     return {"ai": ai.providers_status(), "intel": intel.intel_status()}
+
+
+# ─── User feedback (false alarms / missed phishing) ──────────────────────
+
+class FeedbackRequest(BaseModel):
+    url: str = Field(min_length=1, max_length=4096)
+    label: Literal["false_positive", "false_negative", "confirmed_phishing", "confirmed_safe"]
+    risk_level: str | None = None
+    probability: float | None = None
+    model_version: str | None = None
+    source: str | None = None
+    note: str | None = Field(default=None, max_length=500)
+
+
+@app.post("/feedback")
+def post_feedback(req: FeedbackRequest):
+    row_id = feedback.add_feedback(**req.model_dump())
+    return {"ok": True, "id": row_id}
+
+
+@app.get("/feedback/stats")
+def feedback_stats():
+    return feedback.stats()

@@ -10,3 +10,6 @@ phishing-detector/data/*.tar.gz
 
 # Built from the archives on first use (python intel.py)
 phishing-detector/data/phishdb.sqlite
+
+# Local user feedback + opt-in prediction log (may contain browsing history)
+phishing-detector/data/feedback.sqlite

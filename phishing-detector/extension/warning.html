@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Warning: likely phishing page</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; background: #b71c1c; color: #fff;
+           font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+           display: flex; align-items: center; justify-content: center; padding: 24px 16px; }
+    main { max-width: 640px; width: 100%; }
+    .icon { font-size: 48px; }
+    h1 { font-size: 28px; margin: 8px 0 12px; }
+    .url { background: rgba(0,0,0,.25); border-radius: 8px; padding: 10px 12px;
+           font-family: ui-monospace, Consolas, monospace; font-size: 13px; word-break: break-all; }
+    .url strong { color: #ffeb3b; }
+    .score { margin: 16px 0 6px; font-weight: 600; }
+    ul { margin: 6px 0 20px; padding-left: 20px; }
+    .actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+    button { font: inherit; border-radius: 8px; padding: 10px 18px; cursor: pointer; border: none; }
+    #back { background: #fff; color: #b71c1c; font-weight: 600; }
+    .link { background: none; color: #fff; text-decoration: underline; padding: 10px 6px; opacity: .85; }
+    .link:hover { opacity: 1; }
+    #note { margin-top: 14px; font-size: 13px; opacity: .9; min-height: 20px; }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="icon">🛡️</div>
+    <h1>This page is very likely phishing</h1>
+    <p>The Phishing Detector extension stopped this page from opening. Phishing pages imitate
+      real sites to steal passwords, card numbers or one-time codes.</p>
+    <div class="url" id="url"></div>
+    <div class="score" id="score"></div>
+    <ul id="reasons"></ul>
+    <div class="actions">
+      <button id="back">Go back to safety</button>
+      <button class="link" id="report">This is a false alarm</button>
+      <button class="link" id="proceed">Proceed anyway (not recommended)</button>
+    </div>
+    <div id="note"></div>
+  </main>
+  <script src="settings.js"></script>
+  <script src="warning.js"></script>
+</body>
+</html>
