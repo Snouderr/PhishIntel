@@ -1,0 +1,17 @@
+Received: from mail-sor-f41.google.com (mail-sor-f41.google.com [209.85.220.41])
+	by mx.example.org with ESMTPS; Wed, 08 Oct 2025 12:00:03 +0000
+Authentication-Results: mx.example.org;
+	spf=pass smtp.mailfrom=github.com;
+	dkim=pass header.d=github.com;
+	dmarc=pass header.from=github.com
+From: GitHub <noreply@github.com>
+To: dev@example.org
+Subject: [GitHub] Your weekly digest
+Date: Wed, 08 Oct 2025 12:00:00 +0000
+MIME-Version: 1.0
+Content-Type: text/plain; charset="utf-8"
+
+Here is what happened in your repositories this week.
+
+View your dashboard: https://github.com/dashboard
+Manage notifications: https://github.com/settings/notifications

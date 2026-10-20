@@ -6,6 +6,8 @@ numpy==2.5.3
 joblib==1.6.0
 pydantic==2.13.5
 python-dotenv==1.2.4
+httpx==0.28.1
+dnspython==2.9.0
 
 # Testing (FastAPI's TestClient needs httpx2)
 pytest==9.1.1

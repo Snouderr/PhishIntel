@@ -76,42 +76,59 @@ Each phase ends with something runnable and testable. Tick boxes as we go.
 
 ### Phase 0 — Foundation & hygiene
 - [x] `.gitignore` (venv, `__pycache__`, `.env`, large data archives)
-- [ ] First commit (waiting on your go-ahead)
+- [x] First commit
 - [x] Pin `requirements.txt`; add `httpx2` (TestClient), `pytest`, `python-dotenv`
 - [x] Replace deprecated `on_event` with FastAPI `lifespan`; missing model now returns 503 not 500
 - [x] Tests: `tests/test_features.py`, `tests/test_api.py` — 19 passing
       (run: `cd phishing-detector/backend && ../../.venv/Scripts/python -m pytest`)
 - [x] Serve PhishIntel from the backend (`/app` static mount; `/` redirects there)
 
-### Phase 1 — PhishIntel: safe, data-driven frontend
-- [ ] `esc()` helper for all user data in templates; replace inline `onclick` strings with
-      event delegation (`data-action` attributes)
-- [ ] Accept pasted email **or** `.eml` file upload (drag & drop)
-- [ ] Stage 2 shows the **parsed** headers (from Phase 2 endpoint): SPF/DKIM/DMARC, From vs
+### Phase 1 — PhishIntel: safe, data-driven frontend ✅
+- [x] `esc()` helper for all user data in templates; replace inline `onclick` strings with
+      event delegation (`data-action` attributes) — verified an injected `<img onerror>` doesn't fire
+- [x] Accept pasted email **or** `.eml` file upload (drag & drop)
+- [x] Stage 2 shows the **parsed** headers: SPF/DKIM/DMARC, From vs
       Reply-To vs Return-Path mismatch, display-name spoofing, Received hop chain with IPs
-- [ ] Stage 3 lists URLs actually found in the body (plain text + HTML `href`, defanged forms
-      like `hxxp://` / `[.]` refanged), shows link-text vs real-href mismatch
-- [ ] Stage 4 IOCs auto-generated from parsed data + manual add/remove; dedupe
-- [ ] Stage 6 report built from state (not a fixed string); exports: CSV, JSON, Markdown;
-      defanged indicators in exports
-- [ ] Persist the investigation in `localStorage` so refresh doesn't lose work
-- [ ] Keep "Load demo sample" (several samples: DocuSign, Microsoft 365, bank OTP)
+- [x] Stage 3 lists URLs actually found in the body (plain text + HTML `href` + `<form action>`,
+      defanged forms refanged), link-text vs real-href mismatch, attachments with hashes,
+      **ML score per URL from `/predict`** (pulled forward from Phase 3)
+- [x] Stage 4 IOCs auto-generated from parsed data + manual add/remove/restore; dedupe
+- [x] Stage 5 attack chain built from the analysis (enrichment still Phase 2–3)
+- [x] Stage 6 report + recommendations built from findings; exports: CSV, JSON, Markdown;
+      defang toggle
+- [x] Persist the investigation in `localStorage` so refresh doesn't lose work
+- [x] Demo samples as real `.eml` files in `phishintel/samples/` (DocuSign, Microsoft 365,
+      bank KYC + attachment, legitimate GitHub email) — also used by the tests
+- [x] Pulled forward from Phase 2: `POST /analyze/email` (`backend/email_analysis.py`) —
+      MIME parsing needs Python's `email` package, so the frontend calls it from the start
+- [x] Fix: URL shorteners no longer get the trusted-domain override in `/predict`
 
-### Phase 2 — Backend: analysis & enrichment endpoints
-- [ ] `POST /analyze/email` — Python `email` package: headers, auth results, Received chain,
-      URLs, IPs, emails, attachments (name, type, SHA-256), rule-based verdict **with reasons**
-- [ ] `POST /enrich/domain` — RDAP registration date → domain age; DNS A/MX/TXT(SPF) via dnspython
-- [ ] `POST /enrich/url` — URLhaus lookup; VirusTotal if key configured; ML score via `/predict` logic
-- [ ] `POST /ai/summarize` — Claude proxy; key from `.env`; stage-specific prompts; current model ID
-- [ ] Caching (in-memory TTL) + rate limits for external lookups; graceful "not configured" responses
-- [ ] Tests with mocked external calls
+### Phase 2 — Backend: analysis & enrichment endpoints ✅ (keyless by default)
+- [x] `POST /analyze/email` — done in Phase 1
+- [ ] Scan HTML attachments for forms/links (e.g. the bank sample's `KYC_Form.pdf.html`) — moved to Phase 3
+- [x] `POST /enrich/domain` — RDAP (rdap.org) domain age/registrar + DNS A/MX/NS/SPF/DMARC (dnspython)
+- [x] `POST /enrich/ip` — ASN, owner, country via Team Cymru DNS + reverse DNS (no key)
+- [x] `POST /enrich/url` — ML score + local phishing DB (Phishing.Database dump → SQLite,
+      784k URLs / 497k hosts, shared platforms like sites.google.com excluded from host hits)
+      + OpenPhish community feed; URLhaus / VirusTotal only if keys set
+- [x] `POST /ai/summarize` — providers: **built-in template (offline, default)**, **Ollama (local)**,
+      **Gemini (cloud, opt-in)**. Only derived facts are sent, never the email body;
+      redaction on by default; `dry_run` returns the exact prompt → UI preview + confirm before
+      anything goes to Gemini
+- [x] `GET /config` — which providers / intel sources are available
+- [x] In-memory TTL cache (6 h) for lookups; failures returned as `{error}` instead of raising
+- [x] Tests with mocked external calls — 67 passing
+- [x] Frontend: AI engine picker, Gemini preview/confirm, blocklist column (Stage 3),
+      live infrastructure intel (Stage 5), intel findings feed the verdict + report
 
-### Phase 3 — Wire PhishIntel to the backend
-- [ ] Stage 2 ← `/analyze/email`; Stage 3 ← `/predict` + `/enrich/url` (real ML % + intel hits)
-- [ ] Stage 5 ← `/enrich/domain` (real domain age, registrar, DNS, IP/ASN); kill chain built from data
+### Phase 3 — Deeper analysis & polish
+- [x] Stage 2 ← `/analyze/email`; Stage 3 ← `/enrich/url`; Stage 5 ← `/enrich/domain` + `/enrich/ip` (done in Phases 1–2)
+- [x] Overall risk score combining email findings + intel (domain age, blocklists) (done in Phase 2)
+- [x] AI buttons call `/ai/summarize` (done in Phase 2)
+- [ ] Scan HTML attachments for forms/links; QR-code images in emails (quishing)
 - [ ] Map findings to MITRE ATT&CK (T1566.001/.002 phishing, T1598, T1656 impersonation)
-- [ ] Overall risk score combining header, URL-ML, intel and age signals, with explanation
-- [ ] AI buttons call `/ai/summarize`
+- [ ] Show *why* each verdict point was added (score breakdown) in the report
+- [ ] Optional: Certificate Transparency (crt.sh) first-seen date as a second age signal
 
 ### Phase 4 — ML model improvements (the "research" part of the project)
 - [ ] Rebuild dataset: dedupe; legit URLs **with real paths** (Common Crawl / crawled Tranco pages,

@@ -98,6 +98,8 @@ SUSPICIOUS_WORDS = [
  
 SHORTENER_DOMAINS = {
     "bit.ly", "tinyurl.com", "goo.gl", "t.co", "ow.ly", "is.gd", "buff.ly",
+    "cutt.ly", "rb.gy", "shorturl.at", "rebrand.ly", "t.ly", "tiny.cc",
+    "s.id", "v.gd", "shorturl.com", "bl.ink", "short.io", "lnkd.in",
 }
  
  

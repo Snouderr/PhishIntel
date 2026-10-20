@@ -1,0 +1,34 @@
+Return-Path: <bounce@mailer-docverify.net>
+Received: from mx.company.com (mx.company.com [10.0.0.5])
+	by inbox.company.com with LMTP; Tue, 14 May 2024 10:21:05 -0500
+Received: from mail.secure-docverify.com (mail.secure-docverify.com [185.199.108.153])
+	by mx.company.com with ESMTP id 4f9a1c; Tue, 14 May 2024 10:21:03 -0500
+Authentication-Results: mx.company.com;
+	spf=fail smtp.mailfrom=mailer-docverify.net;
+	dkim=none;
+	dmarc=fail header.from=docusign-secure.com
+X-Spam-Status: Yes, score=8.4
+From: "DocuSign Team" <no-reply@docusign-secure.com>
+Reply-To: docs-support@secure-docverify.com
+To: victim@company.com
+Subject: Secure Document Please Review - Action Required
+Date: Tue, 14 May 2024 10:21:03 -0500
+Message-ID: <a81f2@secure-docverify.com>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="b1"
+
+--b1
+Content-Type: text/plain; charset="utf-8"
+
+You have received a secure document. Please review and sign immediately.
+Review document: http://secure-docverify.com/login?ref=bit.ly/3xPhsh
+
+--b1
+Content-Type: text/html; charset="utf-8"
+
+<html><body>
+<p>You have received a secure document. Please review and sign <b>immediately</b>.</p>
+<p><a href="http://secure-docverify.com/login?ref=bit.ly/3xPhsh">https://www.docusign.com/documents/review</a></p>
+<p>Backup link: <a href="https://bit.ly/3xPhsh">View document</a></p>
+</body></html>
+--b1--

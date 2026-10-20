@@ -1,13 +1,4 @@
-import pytest
-from fastapi.testclient import TestClient
-
 import api
-
-
-@pytest.fixture(scope="module")
-def client():
-    with TestClient(api.app) as c:
-        yield c
 
 
 def predict(client, url):
@@ -38,6 +29,10 @@ def test_trusted_domain_is_capped(client):
 def test_ugc_platform_never_overridden(client):
     body = predict(client, "https://secure-login-update.github.io/paypal/")
     assert body["trust_override_applied"] is False
+
+
+def test_shortener_never_overridden(client):
+    assert predict(client, "https://bit.ly/3xPhsh")["trust_override_applied"] is False
 
 
 def test_restricted_tld_override(client):

