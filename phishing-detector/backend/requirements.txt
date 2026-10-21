@@ -8,6 +8,7 @@ pydantic==2.13.5
 python-dotenv==1.2.4
 httpx==0.28.1
 dnspython==2.9.0
+opencv-python-headless==5.0.0.93  # QR-code decoding (quishing); optional at runtime
 
 # Testing (FastAPI's TestClient needs httpx2)
 pytest==9.1.1

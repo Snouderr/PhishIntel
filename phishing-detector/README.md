@@ -8,6 +8,10 @@ A final-year project with two parts sharing one FastAPI backend:
   email in 6 stages (sample → headers → URLs → IOCs → infrastructure →
   report). It parses the real email, scores every link with the model,
   enriches domains/IPs with free threat intel, and exports a report.
+  - It also reads HTML attachments as text and decodes QR codes in images
+    ("quishing").
+  - Findings are mapped to MITRE ATT&CK v20, and the report shows how the
+    risk score was reached.
 
 ```
  Chrome extension ──┐
@@ -23,7 +27,7 @@ A final-year project with two parts sharing one FastAPI backend:
 # from the repo root — one virtual environment for everything
 python -m venv .venv
 .venv\Scripts\activate
-pip install -r phishing-detector/backend/requirements.txt
+pip install -r phishing-detector/backend/requirements.txt   # includes OpenCV for QR decoding
 
 cd phishing-detector/backend
 uvicorn api:app --port 8000
@@ -33,7 +37,7 @@ uvicorn api:app --port 8000
 - API docs: http://localhost:8000/docs
 - Extension: `chrome://extensions` (or `edge://extensions`) → Developer mode → *Load unpacked* →
   `phishing-detector/extension/`
-- Tests: `cd phishing-detector/backend && python -m pytest` (83 tests, no network needed)
+- Tests: `cd phishing-detector/backend && python -m pytest` (89 tests, no network needed)
 
 Optional keys go in `backend/.env` (copy `.env.example`). **Everything works
 without any key.** Gemini enables cloud AI summaries; VirusTotal and URLhaus

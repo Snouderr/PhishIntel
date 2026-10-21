@@ -91,3 +91,55 @@ def test_analyze_endpoint(client):
     assert r.status_code == 200
     assert r.json()["headers"]["from_address"] == "a@b.com"
     assert client.post("/analyze/email", json={"raw": "   "}).status_code == 400
+
+
+# ─── Phase 3: QR codes, HTML attachments, ATT&CK ─────────────────────────
+
+import attack
+
+
+def test_quishing_qr_code_decoded():
+    r = load("quishing.eml")
+    assert r["qr_codes"][0]["text"] == "https://m1crosoft-mfa-reset.com/auth/verify?uid=8f2c91d0"
+    qr_url = next(u for u in r["urls"] if u["source"] == "qr-code")
+    assert qr_url["found_in"] == "mfa-qr@contoso"
+    assert "brand-lookalike:microsoft" in qr_url["flags"]
+    assert "QR code in the email links to a website" in titles(r)
+    assert r["verdict"]["level"] == "high"
+
+
+def test_html_attachment_redirect_and_obfuscation():
+    r = load("voicemail.eml")
+    s = r["html_attachments"][0]
+    assert s["filename"] == "VM_0812_Play.html" and s["redirects"] == 1 and s["obfuscated"]
+    assert {"HTML attachment redirects to an external site",
+            "Obfuscated script in HTML attachment"} <= titles(r)
+    assert any(u["source"] == "attachment-redirect" and "vm-portal-login.top" in u["url"] for u in r["urls"])
+
+
+def test_html_attachment_form_in_bank_sample():
+    r = load("bank-kyc.eml")
+    assert "HTML attachment contains a credential form" in titles(r)
+    assert any(u["source"] == "attachment-form" and u["url"] == "https://hdfc-kyc-update.in/submit"
+               for u in r["urls"])
+
+
+def test_leet_one_as_i():
+    assert _brand_lookalike("m1crosoft-mfa-reset.com") == "microsoft"
+
+
+def test_attack_mapping_uses_current_ids():
+    r = load("bank-kyc.eml")
+    ids = {t["id"] for t in r["attack"]}
+    assert {"T1684.001", "T1036.007", "T1598.002"} <= ids
+    # v20 revoked T1656 / T1672 in favour of T1684.001 / T1684.002
+    assert not ids & {"T1656", "T1672"}
+    for t in r["attack"]:
+        assert t["url"] == "https://attack.mitre.org/techniques/" + t["id"].replace(".", "/") + "/"
+        assert t["evidence"]
+    # every mapped title points at a known technique
+    assert all(tid in attack.TECHNIQUES for ids_ in attack.BY_TITLE.values() for tid in ids_)
+
+
+def test_legit_sample_has_no_attack_techniques():
+    assert load("legit-newsletter.eml")["attack"] == []

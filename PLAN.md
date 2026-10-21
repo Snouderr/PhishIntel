@@ -121,14 +121,23 @@ Each phase ends with something runnable and testable. Tick boxes as we go.
 - [x] Frontend: AI engine picker, Gemini preview/confirm, blocklist column (Stage 3),
       live infrastructure intel (Stage 5), intel findings feed the verdict + report
 
-### Phase 3 — Deeper analysis & polish
+### Phase 3 — Deeper analysis & polish ✅
 - [x] Stage 2 ← `/analyze/email`; Stage 3 ← `/enrich/url`; Stage 5 ← `/enrich/domain` + `/enrich/ip` (done in Phases 1–2)
 - [x] Overall risk score combining email findings + intel (domain age, blocklists) (done in Phase 2)
 - [x] AI buttons call `/ai/summarize` (done in Phase 2)
-- [ ] Scan HTML attachments for forms/links; QR-code images in emails (quishing)
-- [ ] Map findings to MITRE ATT&CK (T1566.001/.002 phishing, T1598, T1656 impersonation)
-- [ ] Show *why* each verdict point was added (score breakdown) in the report
-- [ ] Optional: Certificate Transparency (crt.sh) first-seen date as a second age signal
+- [x] HTML attachments read as text (never rendered): external forms, password fields,
+      meta-refresh / JavaScript redirects, obfuscated script (atob / eval / fromCharCode)
+- [x] QR codes in inline or attached images decoded offline (OpenCV) — "quishing"; decoded
+      links go through the same URL checks, ML scoring and IOC extraction
+- [x] MITRE ATT&CK (Enterprise **v20**, IDs verified on attack.mitre.org): every finding mapped
+      (`backend/attack.py`); chips on findings, technique table in the report + Markdown export.
+      v20 moved Impersonation / Email Spoofing to T1684.001 / T1684.002 (T1656 / T1672 revoked)
+- [x] Score breakdown in the report: every finding's points, email vs threat-intel subtotal,
+      thresholds explained
+- [x] URL IOCs upgraded to critical when the ML model or a blocklist says high risk
+- [x] New demo samples: `quishing.eml` (QR-only link), `voicemail.eml` (obfuscated HTML
+      attachment); "1" read as both "l" and "i" in brand lookalikes (m1crosoft)
+- [ ] Optional, not done: Certificate Transparency (crt.sh) first-seen date as a second age signal
 
 ### Phase 4 — ML model improvements ✅ (see `phishing-detector/README.md` for results)
 - [x] Rebuild dataset (`build_dataset.py` → `data/urls_v2.csv`, 28,868 URLs): real deep links

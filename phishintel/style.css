@@ -192,3 +192,12 @@ code { font-family: monospace; font-size: 12px; background: #f3f4f6;
 /* ML model reasons under a URL */
 .ml-reasons { margin: 4px 0 0 16px; font-size: 11px; color: #92400e; font-family: system-ui, sans-serif; }
 .ml-reasons li { margin: 1px 0; }
+
+/* MITRE ATT&CK chips + score breakdown */
+.attack-chips { margin-top: 4px; display: flex; flex-wrap: wrap; gap: 4px; }
+.attack-chip { font: 10px/1.6 monospace; padding: 0 6px; border-radius: 4px; background: #eef2ff;
+               color: #3730a3; text-decoration: none; border: 1px solid #c7d2fe; }
+.attack-chip:hover { background: #e0e7ff; }
+.score-box { margin: 14px 0; border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px 12px; }
+.score-box summary { cursor: pointer; font-size: 13px; }
+.score-total td { font-weight: 600; border-top: 2px solid #ddd; }

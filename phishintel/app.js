@@ -10,6 +10,8 @@ const SAMPLES = [
   { file: 'docusign.eml', label: 'DocuSign lure' },
   { file: 'microsoft365.eml', label: 'Microsoft 365 credential phish' },
   { file: 'bank-kyc.eml', label: 'Bank KYC + attachment' },
+  { file: 'quishing.eml', label: 'QR-code phishing (quishing)' },
+  { file: 'voicemail.eml', label: 'Voicemail HTML attachment' },
   { file: 'legit-newsletter.eml', label: 'Legitimate email' },
 ];
 
@@ -125,6 +127,19 @@ async function api(path, body) {
 function iocKey(i) { return `${i.type}|${String(i.indicator).toLowerCase()}`; }
 
 // Auto IOCs (minus dismissed) + custom URLs + manual entries, deduplicated.
+// The email parser rates a URL IOC only by its rule flags; if the ML model
+// (or a blocklist) says the link is high risk, the IOC should say so too.
+function withModelSeverity(ioc) {
+  if (ioc.type !== 'URL' || ioc.severity === 'critical') return ioc;
+  const ml = state.urlScores[ioc.indicator];
+  const listed = state.urlIntel[ioc.indicator]?.blocklists?.listed;
+  if (listed || ml?.risk_level === 'high') {
+    return { ...ioc, severity: 'critical',
+             detail: `${ioc.detail} — ${listed ? 'on a phishing blocklist' : `ML ${Math.round(ml.phishing_probability * 100)}% phishing`}` };
+  }
+  return ioc;
+}
+
 function allIocs() {
   const out = [];
   const seen = new Set();
@@ -134,6 +149,7 @@ function allIocs() {
   };
   (state.analysis?.iocs || [])
     .filter(i => !state.removedIocs.includes(iocKey(i)))
+    .map(withModelSeverity)
     .forEach(push);
   state.customUrls.forEach(u => push({
     type: 'URL', indicator: u, detail: 'Added by analyst', severity: 'medium', source: 'manual',
@@ -255,6 +271,10 @@ const actions = {
       urls: allUrls().map(u => ({ ...u, ml: state.urlScores[u.url] || null, intel: state.urlIntel[u.url] || null })),
       attachments: state.analysis?.attachments,
       intel_findings: intelFindings(),
+      score_breakdown: scoreRows().map(r => ({ title: r.title, severity: r.severity, points: r.points, source: r.from })),
+      attack: attackSummary(),
+      qr_codes: state.analysis?.qr_codes,
+      html_attachments: state.analysis?.html_attachments,
       enrichment: state.enrichment,
       iocs: allIocs().map(i => ({ ...i, indicator: fmtIoc(i) })),
       defanged: state.defang,
@@ -530,6 +550,34 @@ function verdictBanner() {
     </div>`;
 }
 
+// ─── MITRE ATT&CK ────────────────────────────────────────
+// Mapping comes from the backend (attack.py via /config) so the email
+// findings and the UI's own intel findings use one table.
+function attackIds(f) {
+  return f.attack?.length ? f.attack : (config?.attack?.by_title?.[f.title] || []);
+}
+function attackName(id) { return config?.attack?.techniques?.[id] || id; }
+function attackUrl(id) { return `https://attack.mitre.org/techniques/${id.replace('.', '/')}/`; }
+
+function attackSummary() {
+  const byId = new Map();
+  for (const f of allFindings()) {
+    for (const id of attackIds(f)) {
+      if (!byId.has(id)) byId.set(id, { id, name: attackName(id), url: attackUrl(id), evidence: [] });
+      const t = byId.get(id);
+      if (!t.evidence.includes(f.title)) t.evidence.push(f.title);
+    }
+  }
+  return [...byId.values()].sort((a, b) => b.evidence.length - a.evidence.length || a.id.localeCompare(b.id));
+}
+
+function attackChips(f) {
+  const ids = attackIds(f);
+  if (!ids.length) return '';
+  return `<div class="attack-chips">${ids.map(id =>
+    `<a class="attack-chip" href="${esc(attackUrl(id))}" target="_blank" rel="noopener" title="${esc(attackName(id))}">${esc(id)}</a>`).join('')}</div>`;
+}
+
 function findingsList(filter) {
   const items = allFindings().filter(filter);
   if (!items.length) return '<p class="muted">No issues found in this area.</p>';
@@ -537,7 +585,7 @@ function findingsList(filter) {
     <div class="check-row">
       <div class="check-icon ${f.severity === 'high' ? 'icon-fail' : f.severity === 'info' ? 'icon-pass' : 'icon-warn'}">
         ${f.severity === 'high' ? '✕' : f.severity === 'info' ? 'i' : '!'}</div>
-      <div><strong>${esc(f.title)}</strong><div class="muted break">${esc(f.detail)}</div></div>
+      <div><strong>${esc(f.title)}</strong><div class="muted break">${esc(f.detail)}</div>${attackChips(f)}</div>
       <span style="margin-left:auto">${sevBadge(f.severity)}</span>
     </div>`).join('');
 }
@@ -637,6 +685,38 @@ function mlCell(url) {
   return `<span class="badge ${cls}">${s.trust_override_applied ? 'trusted' : pct + '%'}</span>`;
 }
 
+const SOURCE_LABELS = {
+  'text': 'body text', 'html-link': 'HTML link', 'html-form': 'HTML form',
+  'qr-code': 'QR code', 'attachment-form': 'attachment form',
+  'attachment-redirect': 'attachment redirect', 'attachment-link': 'attachment link', 'analyst': 'added by you',
+};
+
+function htmlAttachmentSection() {
+  const list = state.analysis.html_attachments || [];
+  if (!list.length) return '';
+  const yes = (v, label) => v ? `<span class="badge badge-red">${label}</span>` : '';
+  return `
+    <p class="section-title">HTML attachments <span class="muted">(read as text — never opened or run)</span></p>
+    <table style="margin-bottom:14px"><thead><tr><th>File</th><th>What it contains</th></tr></thead><tbody>
+    ${list.map(s => `<tr><td class="break">${esc(s.filename)}</td><td>
+      ${yes(s.password_field, 'password field')} ${yes(s.external_forms, `${s.external_forms} external form(s)`)}
+      ${yes(s.redirects, `${s.redirects} redirect(s)`)} ${s.obfuscated ? '<span class="badge badge-yellow">obfuscated script</span>' : ''}
+      ${s.links ? `<span class="badge badge-gray">${s.links} link(s)</span>` : ''}
+      ${!(s.password_field || s.external_forms || s.redirects || s.obfuscated || s.links) ? '<span class="muted">nothing suspicious found</span>' : ''}
+    </td></tr>`).join('')}
+    </tbody></table>`;
+}
+
+function qrSection() {
+  const codes = state.analysis.qr_codes || [];
+  if (!codes.length) return '';
+  return `
+    <p class="section-title">QR codes in images <span class="muted">(decoded offline)</span></p>
+    <table style="margin-bottom:14px"><thead><tr><th>Image</th><th>Decoded content</th></tr></thead><tbody>
+    ${codes.map(q => `<tr><td class="break">${esc(q.image)}</td><td class="mono break">${esc(q.text)}</td></tr>`).join('')}
+    </tbody></table>`;
+}
+
 function intelCell(url) {
   const i = state.urlIntel[url];
   if (!i) return state.urlScores[url]?.error ? '<span class="muted">n/a</span>' : '<span class="muted">checking…</span>';
@@ -661,7 +741,7 @@ function stageUrls() {
       <td>${(u.flags || []).map(f => `<span class="badge ${f === 'no-https' ? 'badge-gray' : 'badge-yellow'}">${esc(f)}</span>`).join(' ') || '<span class="muted">—</span>'}</td>
       <td>${mlCell(u.url)}</td>
       <td>${intelCell(u.url)}</td>
-      <td class="muted">${esc(u.source)}</td>
+      <td class="muted">${esc(SOURCE_LABELS[u.source] || u.source)}${u.found_in ? `<div class="break">${esc(u.found_in)}</div>` : ''}</td>
     </tr>`).join('');
   const attRows = atts.map(a => `
     <tr>
@@ -686,6 +766,8 @@ function stageUrls() {
       <p class="section-title">Attachments</p>
       ${atts.length ? `<table style="margin-bottom:14px"><thead><tr><th>File</th><th>Type</th><th>Size</th><th>SHA-256</th></tr></thead>
         <tbody>${attRows}</tbody></table>` : '<p class="muted">No attachments.</p>'}
+      ${htmlAttachmentSection()}
+      ${qrSection()}
       <p class="section-title">Findings</p>
       ${findingsList(f => ['url', 'attachment', 'content'].includes(f.category) ||
         (f.category === 'intel' && /^URL|VirusTotal/.test(f.title)))}
@@ -844,6 +926,10 @@ function recommendations() {
     recs.push('Block the listed URLs and linked domains at the web proxy / DNS filter.');
   if (a.attachments.length)
     recs.push('Add attachment SHA-256 hashes to EDR blocklists and sweep endpoints for them.');
+  if ((a.html_attachments || []).some(s => s.password_field || s.external_forms || s.redirects))
+    recs.push('Quarantine or block .html / .htm / .svg attachments at the email gateway — they open locally, where URL filtering never sees them.');
+  if ((a.qr_codes || []).length)
+    recs.push('Warn users not to scan QR codes in emails: the link opens on a personal phone, outside corporate web filtering. Block the decoded URL too.');
   recs.push('Search mail logs for the same sender, originating IP and subject; purge matching messages from all mailboxes.');
   if (a.findings.some(f => /form|credential|password/i.test(f.title + f.detail)))
     recs.push('Identify users who clicked or submitted data; reset their credentials and review sign-in logs.');
@@ -875,6 +961,8 @@ function stageReport() {
       </div>
       <p class="section-title">Key findings</p>
       ${findingsList(f => f.severity === 'high' || f.severity === 'medium')}
+      ${scoreBreakdownSection()}
+      ${attackSection()}
       <p class="section-title">Recommended actions</p>
       ${recommendations().map((r, i) => `<div class="rec-item"><div class="rec-num">${i + 1}</div><div>${esc(r)}</div></div>`).join('')}
       ${aiBlock('ai-exec', 'executive', '✦ Generate executive summary')}
@@ -888,6 +976,43 @@ function stageReport() {
       </div>
       ${navRow({ nextLabel: '', extra: '<button class="btn btn-sec" data-action="reset">↺ New investigation</button>' })}
     </div>`;
+}
+
+// How the risk score was reached: every finding's points, email vs. intel.
+function scoreRows() {
+  return allFindings().filter(f => SEV_WEIGHT[f.severity] > 0)
+    .map(f => ({ ...f, points: SEV_WEIGHT[f.severity], from: f.category === 'intel' ? 'threat intel' : 'email analysis' }));
+}
+
+function scoreBreakdownSection() {
+  const rows = scoreRows();
+  const v = combinedVerdict();
+  const sub = from => rows.filter(r => r.from === from).reduce((n, r) => n + r.points, 0);
+  return `
+    <details class="score-box">
+      <summary><strong>How the risk score was calculated</strong> — ${v.score} points → ${esc(v.label)}</summary>
+      <p class="muted" style="margin:8px 0">Each finding adds points by severity: high 3, medium 2, low 1.
+        8 or more = <strong>Likely phishing</strong>, 4–7 = <strong>Suspicious</strong>, under 4 = no strong indicators.</p>
+      <table><thead><tr><th>Finding</th><th>Source</th><th>Severity</th><th style="text-align:right">Points</th></tr></thead><tbody>
+        ${rows.map(r => `<tr><td>${esc(r.title)}</td><td class="muted">${r.from}</td><td>${sevBadge(r.severity)}</td>
+          <td style="text-align:right">+${r.points}</td></tr>`).join('')}
+        <tr class="score-total"><td colspan="3">Email analysis ${sub('email analysis')} + threat intel ${sub('threat intel')}</td>
+          <td style="text-align:right">${v.score}</td></tr>
+      </tbody></table>
+    </details>`;
+}
+
+function attackSection() {
+  const techniques = attackSummary();
+  if (!techniques.length) return '';
+  return `
+    <p class="section-title">MITRE ATT&amp;CK techniques <span class="muted">(Enterprise ${esc(config?.attack?.version || 'v20')})</span></p>
+    <table style="margin-bottom:14px"><thead><tr><th>Technique</th><th>Evidence in this case</th></tr></thead><tbody>
+      ${techniques.map(t => `<tr>
+        <td style="white-space:nowrap"><a href="${esc(t.url)}" target="_blank" rel="noopener" class="mono">${esc(t.id)}</a>
+          <div style="font-size:12px">${esc(t.name)}</div></td>
+        <td class="muted">${t.evidence.map(esc).join('<br>')}</td></tr>`).join('')}
+    </tbody></table>`;
 }
 
 function buildMarkdownReport() {
@@ -907,8 +1032,25 @@ function buildMarkdownReport() {
   md.push(`| To | ${cell(h.to.join(', '))} |`, `| Subject | ${cell(h.subject)} |`, `| Date | ${cell(h.date)} |`);
   md.push(`| SPF / DKIM / DMARC | ${a.auth.spf} / ${a.auth.dkim} / ${a.auth.dmarc} |`, '');
   md.push('## Findings', '');
-  allFindings().forEach(f => md.push(`- **[${f.severity.toUpperCase()}] ${f.title}** — ${f.detail}`));
+  allFindings().forEach(f => md.push(`- **[${f.severity.toUpperCase()}] ${f.title}** — ${f.detail}`
+    + (attackIds(f).length ? ` _(ATT&CK: ${attackIds(f).join(', ')})_` : '')));
   md.push('');
+  const rows = scoreRows();
+  md.push('## Score breakdown', '', 'High = 3, medium = 2, low = 1 point. ≥ 8 likely phishing, 4–7 suspicious.', '',
+    '| Finding | Source | Severity | Points |', '|---|---|---|---:|');
+  rows.forEach(r => md.push(`| ${cell(r.title)} | ${r.from} | ${r.severity} | +${r.points} |`));
+  md.push(`| **Total** | | | **${v.score}** |`, '');
+  const techniques = attackSummary();
+  if (techniques.length) {
+    md.push(`## MITRE ATT&CK (Enterprise ${config?.attack?.version || 'v20'})`, '', '| Technique | Name | Evidence |', '|---|---|---|');
+    techniques.forEach(t => md.push(`| [${t.id}](${t.url}) | ${cell(t.name)} | ${cell(t.evidence.join('; '))} |`));
+    md.push('');
+  }
+  if ((a.qr_codes || []).length) {
+    md.push('## QR codes', '', '| Image | Decoded content |', '|---|---|');
+    a.qr_codes.forEach(q => md.push(`| ${cell(q.image)} | \`${cell(fmtIoc({ type: 'URL', indicator: q.text }))}\` |`));
+    md.push('');
+  }
   const enr = compactEnrichment();
   if (Object.keys(enr.domains).length || Object.keys(enr.ips).length) {
     md.push('## Infrastructure', '', '| Indicator | Details |', '|---|---|');

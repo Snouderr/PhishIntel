@@ -75,6 +75,8 @@ SUSPICIOUS_TLDS = {
 }
 
 LEET = str.maketrans({"0": "o", "1": "l", "3": "e", "4": "a", "5": "s", "7": "t", "$": "s"})
+# Same, but reading "1" as "i" (m1crosoft) — "1" is used for both letters
+LEET_I = str.maketrans({"0": "o", "1": "i", "3": "e", "4": "a", "5": "s", "7": "t", "$": "s"})
 
 
 def levenshtein(a: str, b: str, max_dist: int = 3) -> int:

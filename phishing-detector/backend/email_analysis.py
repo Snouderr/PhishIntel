@@ -24,7 +24,8 @@ from email.utils import getaddresses, parseaddr
 from html.parser import HTMLParser
 from urllib.parse import urlparse
 
-from brands import BRAND_DOMAINS, LEET as _LEET, brand_matches
+import attack
+from brands import BRAND_DOMAINS, LEET as _LEET, LEET_I as _LEET_I, brand_matches
 from feature_extraction import SHORTENER_DOMAINS, get_full_domain
 
 URGENCY_PATTERNS = [
@@ -41,6 +42,7 @@ RISKY_EXTENSIONS = {
     ".docm", ".xlsm", ".pptm", ".jar", ".msi",
 }
 ARCHIVE_EXTENSIONS = {".zip", ".rar", ".7z", ".gz", ".tar"}
+HTML_ATTACHMENT_EXTENSIONS = {".html", ".htm", ".shtml", ".xhtml", ".svg"}
 
 SEVERITY_WEIGHT = {"high": 3, "medium": 2, "low": 1, "info": 0}
 
@@ -91,14 +93,15 @@ def _brand_lookalike(domain: str):
     # (login-microsoftonline.account-verify), with digit look-alikes undone
     # so micros0ft / paypa1 still match.
     host_part = domain.lower()[: -len(reg)] + reg.split(".")[0]
-    normalized = host_part.translate(_LEET)
-    tokens = set(re.split(r"[-_.]+", normalized))
-    for brand in BRAND_DOMAINS:
-        # Short brands (sbi, dhl) only as a whole token, or they match
-        # inside unrelated words; longer ones anywhere (docusign-secure,
-        # paypalverify, paypal.verify-acct.com).
-        if brand_matches(brand, normalized, tokens):
-            return brand
+    # "1" stands in for both "l" (paypa1) and "i" (m1crosoft) — try both readings
+    for normalized in {host_part.translate(_LEET), host_part.translate(_LEET_I)}:
+        tokens = set(re.split(r"[-_.]+", normalized))
+        for brand in BRAND_DOMAINS:
+            # Short brands (sbi, dhl) only as a whole token, or they match
+            # inside unrelated words; longer ones anywhere (docusign-secure,
+            # paypalverify, paypal.verify-acct.com).
+            if brand_matches(brand, normalized, tokens):
+                return brand
     return None
 
 
@@ -147,6 +150,8 @@ def _clean_url(u: str) -> str:
     u = u.strip().rstrip(_TRAILING_PUNCT)
     if u.lower().startswith("www."):
         u = "http://" + u
+    elif u.startswith("//"):  # protocol-relative (common in form actions)
+        u = "https:" + u
     return u
 
 
@@ -223,13 +228,22 @@ def _parse_hops(msg) -> list:
 
 
 def _walk_parts(msg):
-    texts, htmls, attachments = [], [], []
+    """
+    Returns (texts, htmls, attachments, html_attachments, images):
+      html_attachments  [(filename, html)] — attached .html/.htm/.svg pages
+      images            [(name, bytes)]    — every image part, attached or inline
+    """
+    texts, htmls, attachments, html_attachments, images = [], [], [], [], []
     for part in msg.walk():
         if part.is_multipart():
             continue
         filename = part.get_filename()
         disposition = part.get_content_disposition()
         ctype = part.get_content_type()
+        if ctype.startswith("image/"):
+            payload = part.get_payload(decode=True) or b""
+            name = filename or str(part.get("Content-ID", "") or "").strip("<>") or "inline image"
+            images.append((name, payload))
         if filename or disposition == "attachment":
             payload = part.get_payload(decode=True) or b""
             attachments.append({
@@ -239,6 +253,9 @@ def _walk_parts(msg):
                 "md5": hashlib.md5(payload).hexdigest(),
                 "sha256": hashlib.sha256(payload).hexdigest(),
             })
+            ext = "." + (filename or "").lower().rsplit(".", 1)[-1] if "." in (filename or "") else ""
+            if ctype in ("text/html", "image/svg+xml") or ext in HTML_ATTACHMENT_EXTENSIONS:
+                html_attachments.append((filename or "(unnamed)", payload.decode("utf-8", "replace")))
             continue
         try:
             content = part.get_content()
@@ -251,18 +268,107 @@ def _walk_parts(msg):
             htmls.append(content)
         elif ctype.startswith("text/"):
             texts.append(content)
-    return texts, htmls, attachments
+    return texts, htmls, attachments, html_attachments, images
 
 
-def _extract_urls(texts, htmls) -> tuple[list, str]:
-    """Returns (url records, combined visible text)."""
+# ─── HTML attachments ────────────────────────────────────────────────────
+# Attached .html files are a classic credential-phishing vehicle: they open
+# locally (no URL to block), show a fake login form and post the password
+# to the attacker, or immediately redirect to a phishing site. They are
+# parsed as text here — never rendered or executed.
+
+_META_REFRESH_RE = re.compile(
+    r"""<meta[^>]+http-equiv\s*=\s*["']?refresh[^>]*content\s*=\s*["'][^"']*?url\s*=\s*['"]?([^"'>\s]+)""", re.I)
+_JS_REDIRECT_RE = re.compile(
+    r"""(?:location(?:\.href)?\s*=|location\.(?:replace|assign)\s*\()\s*["'`](https?://[^"'`]+)""", re.I)
+_PASSWORD_INPUT_RE = re.compile(r"""<input[^>]+type\s*=\s*["']?password""", re.I)
+_OBFUSCATION_RE = re.compile(r"\batob\s*\(|\bunescape\s*\(|String\.fromCharCode|\beval\s*\(|document\.write\s*\(\s*(?:atob|unescape)", re.I)
+_BASE64_BLOB_RE = re.compile(r"[A-Za-z0-9+/]{200,}={0,2}")
+
+
+def _scan_html_attachments(html_attachments) -> tuple[list, list]:
+    """Returns (url records to add, per-attachment summaries)."""
+    urls, summaries = [], []
+    for name, html in html_attachments:
+        p = _LinkExtractor()
+        try:
+            p.feed(html)
+        except Exception:
+            pass
+        forms = [a for a in p.forms if a.lower().startswith(("http", "hxxp", "//"))]
+        redirects = _META_REFRESH_RE.findall(html) + _JS_REDIRECT_RE.findall(html)
+        links = [h for h, _ in p.links if h.lower().startswith(("http", "hxxp"))]
+        urls += [(u, "attachment-form", name) for u in forms]
+        urls += [(u, "attachment-redirect", name) for u in redirects]
+        urls += [(u, "attachment-link", name) for u in links]
+        summaries.append({
+            "filename": name,
+            "external_forms": len(forms),
+            "password_field": bool(_PASSWORD_INPUT_RE.search(html)),
+            "redirects": len(redirects),
+            "links": len(links),
+            "obfuscated": bool(_OBFUSCATION_RE.search(html)) and bool(_BASE64_BLOB_RE.search(html)
+                                                                      or "fromCharCode" in html),
+        })
+    return urls, summaries
+
+
+# ─── QR codes ("quishing") ───────────────────────────────────────────────
+# A QR code in an email moves the link off the scanned channel: mail
+# filters see an image, and the victim opens the URL on a phone, outside
+# corporate protection. Decoded with OpenCV's QR detector (no network).
+
+MAX_IMAGE_BYTES = 10 * 1024 * 1024
+
+
+def _decode_qr(data: bytes) -> list[str]:
+    try:
+        import cv2
+        import numpy as np
+    except ImportError:  # optional dependency — analysis still works without it
+        return []
+    img = cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_GRAYSCALE)
+    if img is None:  # not a format OpenCV reads (e.g. GIF) or not an image
+        return []
+    h, w = img.shape[:2]
+    if max(h, w) > 2000:
+        scale = 2000 / max(h, w)
+        img = cv2.resize(img, (int(w * scale), int(h * scale)))
+    detector = cv2.QRCodeDetector()
+    candidates = [img]
+    if max(h, w) < 400:  # small codes decode more reliably when enlarged
+        candidates.append(cv2.resize(img, (w * 3, h * 3), interpolation=cv2.INTER_NEAREST))
+    for im in candidates:
+        try:
+            ok, texts, _, _ = detector.detectAndDecodeMulti(im)
+        except cv2.error:
+            continue
+        found = [t for t in (texts or []) if t]
+        if ok and found:
+            return found
+    return []
+
+
+def _scan_qr_codes(images) -> list:
+    codes = []
+    for name, data in images:
+        if not data or len(data) > MAX_IMAGE_BYTES:
+            continue
+        for text in _decode_qr(data):
+            codes.append({"image": name, "text": text})
+    return codes
+
+
+def _extract_urls(texts, htmls, extra=()) -> tuple[list, str]:
+    """Returns (url records, combined visible text). `extra` adds URLs found
+    outside the body text: (url, source, found_in) from attachments / QR codes."""
     found = {}  # url -> record (dict keeps first-seen order)
 
-    def add(url, source, text=""):
+    def add(url, source, text="", found_in=""):
         url = _clean_url(refang(url))
         if not urlparse(url).hostname:
             return
-        rec = found.setdefault(url, {"url": url, "source": source, "link_text": ""})
+        rec = found.setdefault(url, {"url": url, "source": source, "link_text": "", "found_in": found_in})
         if text and not rec["link_text"]:
             rec["link_text"] = text
 
@@ -290,6 +396,8 @@ def _extract_urls(texts, htmls) -> tuple[list, str]:
     for m in _URL_RE.finditer(refang(combined)):
         if _clean_url(m.group(0)) not in decoys or _clean_url(m.group(0)) in found:
             add(m.group(0), "text")
+    for url, source, found_in in extra:
+        add(url, source, found_in=found_in)
 
     urls = []
     for rec in found.values():
@@ -314,7 +422,8 @@ def _finding(findings, sev, category, title, detail):
     findings.append({"severity": sev, "category": category, "title": title, "detail": detail})
 
 
-def _run_rules(headers, auth, hops, urls, attachments, subject_and_body) -> list:
+def _run_rules(headers, auth, hops, urls, attachments, subject_and_body,
+               html_summaries=(), qr_codes=()) -> list:
     f = []
     from_domain = headers["from_domain"]
     from_reg = _registered(from_domain)
@@ -372,6 +481,28 @@ def _run_rules(headers, auth, hops, urls, attachments, subject_and_body) -> list
                          f"{u['domain']} looks like {flag.split(':', 1)[1]} but is not official.")
         if u["source"] == "html-form":
             _finding(f, "high", "url", "HTML form submits data to an external site", u["url"])
+
+    # QR codes (quishing)
+    for q in qr_codes:
+        if _URL_RE.match(refang(q["text"])):
+            _finding(f, "medium", "url", "QR code in the email links to a website",
+                     f"{q['text']} (in {q['image']}) — phones open it outside email/web filtering")
+        else:
+            _finding(f, "info", "content", "QR code found (no link)", f"{q['text'][:120]} (in {q['image']})")
+
+    # HTML attachments, read as text
+    for s in html_summaries:
+        if s["external_forms"] or s["password_field"]:
+            what = "a password field" if s["password_field"] else "a form"
+            dest = f" posting to {s['external_forms']} external site(s)" if s["external_forms"] else ""
+            _finding(f, "high", "attachment", "HTML attachment contains a credential form",
+                     f"{s['filename']} has {what}{dest} — opens locally, so URL filters never see it")
+        if s["redirects"]:
+            _finding(f, "high", "attachment", "HTML attachment redirects to an external site",
+                     f"{s['filename']} forwards the victim to another page as soon as it is opened")
+        if s["obfuscated"]:
+            _finding(f, "medium", "attachment", "Obfuscated script in HTML attachment",
+                     f"{s['filename']} decodes hidden content at runtime (atob / eval / fromCharCode)")
 
     # Attachments
     for a in attachments:
@@ -483,13 +614,18 @@ def analyze_email(raw: str) -> dict:
         hops.insert(0, {"from": "X-Originating-IP", "by": "", "ip": ip,
                         "internal": _is_internal_ip(ip), "date": ""})
 
-    texts, htmls, attachments = _walk_parts(msg)
-    urls, visible_text = _extract_urls(texts, htmls)
+    texts, htmls, attachments, html_attachments, images = _walk_parts(msg)
+    att_urls, html_summaries = _scan_html_attachments(html_attachments)
+    qr_codes = _scan_qr_codes(images)
+    qr_urls = [(q["text"], "qr-code", q["image"]) for q in qr_codes if _URL_RE.match(refang(q["text"]))]
+    urls, visible_text = _extract_urls(texts, htmls, extra=att_urls + qr_urls)
 
     findings = _run_rules(headers, auth, hops, urls, attachments,
-                          headers["subject"] + "\n" + visible_text)
+                          headers["subject"] + "\n" + visible_text,
+                          html_summaries=html_summaries, qr_codes=qr_codes)
     order = {"high": 0, "medium": 1, "low": 2, "info": 3}
     findings.sort(key=lambda x: order[x["severity"]])
+    attack.annotate(findings)
 
     body_emails = sorted({e.lower() for e in _EMAIL_RE.findall(visible_text)})
     verdict = _verdict(findings)
@@ -511,4 +647,7 @@ def analyze_email(raw: str) -> dict:
         "findings": findings,
         "verdict": verdict,
         "iocs": iocs,
+        "html_attachments": html_summaries,
+        "qr_codes": qr_codes,
+        "attack": attack.summary(findings),
     }

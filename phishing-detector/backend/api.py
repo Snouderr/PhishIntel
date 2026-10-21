@@ -27,6 +27,7 @@ from pydantic import BaseModel, Field
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 
 import ai  # noqa: E402  (reads env at call time)
+import attack  # noqa: E402
 import feedback  # noqa: E402
 import intel  # noqa: E402
 from brands import FREE_HOSTING_PLATFORMS
@@ -332,7 +333,8 @@ def ai_summarize(req: SummaryRequest):
 
 @app.get("/config")
 def config():
-    return {"ai": ai.providers_status(), "intel": intel.intel_status()}
+    return {"ai": ai.providers_status(), "intel": intel.intel_status(),
+            "attack": {"version": "v20", "techniques": attack.TECHNIQUES, "by_title": attack.BY_TITLE}}
 
 
 # ─── User feedback (false alarms / missed phishing) ──────────────────────
