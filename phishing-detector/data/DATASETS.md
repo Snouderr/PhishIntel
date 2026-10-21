@@ -47,6 +47,42 @@ year project and keeps feature extraction time reasonable.
 
 ---
 
+## Phishing.Database archives (offline blocklist + phishing sample)
+
+The backend's offline blocklist and part of the v2 phishing class come from
+[Phishing.Database](https://github.com/Phishing-Database/Phishing.Database)
+(MIT license). The archives are too large for git (≈18 MB), so download
+them into this folder:
+
+```bash
+cd phishing-detector/data
+curl -LO https://phish.co.za/latest/ALL-phishing-links.tar.gz
+curl -LO https://phish.co.za/latest/ALL-phishing-domains.tar.gz
+```
+
+On first use the backend builds `phishdb.sqlite` from them (≈7 s, also
+git-ignored), or run `python ../backend/intel.py`. Without the archives,
+everything works except the local-list check.
+
+**Snapshot used for this project's results (list date 2026-09-25).** The
+`latest/` URLs above are updated continuously, and Phishing.Database
+publishes no dated releases, so a fresh download will be a newer list.
+These SHA-256 checksums identify the exact archives behind the reported
+results:
+
+| File | Size (bytes) | SHA-256 |
+|---|---:|---|
+| `ALL-phishing-links.tar.gz` | 14,243,438 | `6dc15211cd716045c29e898e5a155ebfe24f0da593ab9044906d2bd406f0b27d` |
+| `ALL-phishing-domains.tar.gz` | 4,505,471 | `108f6162d6825c6b5cbe5d58173a4727884ee4d195fbb74c5ed5c65a701e572b` |
+
+Check a download with `sha256sum ALL-phishing-*.tar.gz` (Windows:
+`certutil -hashfile ALL-phishing-links.tar.gz SHA256`). If the hashes don't
+match, you have a newer list. The blocklist still works, but rebuilding
+`urls_v2.csv` will sample different phishing URLs. The training set
+itself is reproducible regardless, because `urls_v2.csv` is committed.
+
+---
+
 ## v2 training set — `urls_v2.csv` (Phase 4)
 
 Built by `backend/build_dataset.py` (collected October 2026). Columns:

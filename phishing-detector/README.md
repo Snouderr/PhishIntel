@@ -1,5 +1,10 @@
 # Phishing Detector + PhishIntel
 
+> Project overview, screenshots and quick start: [root README](../README.md).
+> Full evaluation write-up: [docs/EVALUATION.md](../docs/EVALUATION.md) ·
+> architecture & API reference: [docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md) ·
+> demo script: [docs/DEMO.md](../docs/DEMO.md).
+
 A final-year project with two parts sharing one FastAPI backend:
 
 - **Phishing URL detector**: an ML model that scores any URL, served to a

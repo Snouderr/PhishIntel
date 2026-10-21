@@ -14,7 +14,8 @@ enriches indicators with live threat intel, and produces a real report. Both sha
                     ├──► FastAPI backend ──► ML model (/predict)
  PhishIntel web UI ─┘         │           ──► email parser (/analyze/email)
                               │           ──► enrichment: RDAP, DNS, URLhaus, VirusTotal (/enrich/*)
-                              └───────────► Claude API proxy (/ai/summarize) — key stays server-side
+                              └───────────► AI summaries (/ai/summarize): built-in (offline),
+                                            Ollama (local), Gemini (opt-in) — key stays server-side
 ```
 
 ---
@@ -66,7 +67,7 @@ enriches indicators with live threat intel, and produces a real report. Both sha
 | Config (add) | python-dotenv — keeps API keys in `backend/.env`, never in JS | Phase 2 |
 | Optional storage | SQLite (stdlib) — prediction log + saved investigations | Phase 2/5 |
 | Frontend | Plain HTML/CSS/JS (no build step), Chrome Manifest V3 | existing |
-| External APIs | Anthropic Claude (key), URLhaus/abuse.ch (free key), VirusTotal (free key, 4 req/min), RDAP (no key) | Phase 2 |
+| External APIs | Google Gemini (optional key), Ollama (local, no key), URLhaus/abuse.ch (free key), VirusTotal (free key, 4 req/min), RDAP (no key) | Phase 2 |
 
 ---
 
@@ -176,13 +177,19 @@ Each phase ends with something runnable and testable. Tick boxes as we go.
 - [x] Verified end-to-end in headless Edge with the unpacked extension: block → warning →
       proceed, banner show/clear, popup report reaches the backend, settings, deep link
 
-### Phase 6 — Documentation & delivery
-- [ ] Top-level README: architecture diagram, setup, `.env.example`, run commands
-- [ ] Evaluation write-up (metrics before/after leakage fix — good report material)
-- [ ] Limitations: concept drift, WHOIS privacy, API rate limits, lexical-only blind spots
-- [ ] Optional: Dockerfile / `docker compose up` for one-command demo
-
----
+### Phase 6 — Documentation & delivery ✅
+- [x] Root `README.md`: overview, architecture diagram (Mermaid), features, screenshots,
+      quick start, repository layout, links to all docs
+- [x] `docs/ARCHITECTURE.md`: components, module responsibilities, API reference, how URLs
+      and emails are scored, privacy & security design
+- [x] `docs/EVALUATION.md`: leakage audit, v2 dataset, method, results (CV, held-out,
+      v1 vs v2 on unseen URLs, per source), figures, error analysis, limitations
+- [x] `docs/DEMO.md`: 10-minute demo script + likely viva questions
+- [x] `docs/screenshots/`: 6 PhishIntel stages + extension warning, banner, popup, settings
+- [x] Phishing.Database download instructions (archives are git-ignored)
+- [ ] Docker / `docker compose up` — skipped: Docker isn't installed here, and an untested
+      Dockerfile would be worse than none
+- [ ] LICENSE — your choice (keep none while the repo is private / under assessment)
 
 ## Order of work
 0 → 1 → 2 → 3 gives a working, real PhishIntel quickly. Phase 4 (ML) is independent and can
